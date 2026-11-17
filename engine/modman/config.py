@@ -51,6 +51,7 @@ class Config:
         self.profiles_dir = self.data / "profiles"
         self.state_dir = self.data / "state"
         self.logs_dir = self.data / "logs"
+        self.snapshots_dir = self.data / "snapshots"
         self.tmp_dir = self.data / "tmp"
         self.ui = Path(ui) if ui else _find_ui()
         # Files at least this big are hardlinked; smaller ones are copied so a mod that rewrites its own
@@ -63,7 +64,7 @@ class Config:
         return (self.game / GAME_EXE_REL).is_file()
 
     def ensure(self) -> None:
-        for d in (self.library, self.profiles_dir, self.state_dir, self.logs_dir, self.tmp_dir):
+        for d in (self.library, self.profiles_dir, self.state_dir, self.logs_dir, self.snapshots_dir, self.tmp_dir):
             d.mkdir(parents=True, exist_ok=True)
 
     # user-facing settings (theme/accent) live next to engine settings in settings.json

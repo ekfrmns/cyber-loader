@@ -59,6 +59,16 @@ class ApiTest(unittest.TestCase):
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
 
+    def test_set_requires_over_http(self):
+        code, r = self.call("POST", "/api/mod/requires", {"id": "Core", "requires": ["Fancy"]})
+        self.assertEqual((code, r["mod"]["requires"]), (200, ["Fancy"]))
+        code, r = self.call("POST", "/api/mod/requires", {"id": "Core", "requires": ["Core"]})
+        self.assertEqual(code, 400)
+        code, r = self.call("POST", "/api/mod/requires", {"id": "Nope", "requires": []})
+        self.assertEqual(code, 404)
+        code, s = self.call("GET", "/api/state")
+        self.assertEqual({m["id"]: m["requires"] for m in s["mods"]}["Core"], ["Fancy"])
+
     def test_state_shape(self):
         code, s = self.call("GET", "/api/state")
         self.assertEqual(code, 200)

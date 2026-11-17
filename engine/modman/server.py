@@ -137,6 +137,10 @@ def route(app: App, method: str, path: str, body: dict):
             return app.cfg.settings()
         if P == "/api/trash":
             return app.list_trash()
+        if P == "/api/snapshots":
+            return app.list_snapshots()
+        if P.startswith("/api/snapshots/"):
+            return app.get_snapshot(P[len("/api/snapshots/"):])
         raise ApiError(404, "unknown endpoint")
     if P == "/api/toggle":
         return app.toggle(str(body["id"]), bool(body["enabled"]))
@@ -168,6 +172,14 @@ def route(app: App, method: str, path: str, body: dict):
         return app.discard()
     if P == "/api/mod/delete":
         return app.delete_mod(str(body["id"]))
+    if P == "/api/mod/requires":
+        return app.set_requires(str(body["id"]), body.get("requires"))
+    if P == "/api/snapshots/save":
+        return app.save_snapshot(str(body.get("name") or ""))
+    if P == "/api/snapshots/restore":
+        return app.restore_snapshot(str(body["id"]))
+    if P == "/api/snapshots/pin":
+        return app.pin_snapshot(str(body["id"]), bool(body.get("pinned", True)), body.get("name"))
     if P == "/api/trash/restore":
         return app.restore_trash(str(body["id"]))
     if P == "/api/trash/empty":

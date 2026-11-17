@@ -2,6 +2,14 @@
 
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = changes that need your data migrated.
 
+## 1.2.0 - 2026-11-17
+Setup history, and a picker for what a mod needs.
+- **Setup history** ("..." menu, "Setup history…"). A snapshot is saved after every successful Apply: which mods were on (in order), the profile, and for each mod its name, version, upload date and Nexus number as far as its library folder name says. It holds no mod files. Restore puts that mod list back on screen; nothing in the game changes until you review and apply, so every safety rule still applies.
+- It names the old version of a mod after an update: "this setup used version 1.0.0, you have version 1.1.0 now", with a "Copy Nexus link" button so you can download the old version yourself. The app never contacts Nexus. Mods deleted since are skipped and named, and flagged when they are in Deleted mods. A mod whose files changed inside the same folder is flagged "changed since" (no old version is known for those).
+- "Keep current setup…" saves a named setup that is never cleaned up; any setup can be kept, renamed or un-kept. Automatic ones past the newest 100 are moved to `snapshots\old` (nothing is erased). Setups live in `<data>\snapshots`.
+- **What it needs:** right-click a mod, "What it needs…", and tick the mods it can't work without. You get the same "Needs …" warning as the automatic ones. It is saved in the mod's own `.mod.json`; nothing in the game folder changes.
+- API (additive, see `docs/API.md`): `GET /api/snapshots`, `GET /api/snapshots/<id>`, `POST /api/snapshots/save|restore|pin`, `POST /api/mod/requires`. Nothing was removed or changed. No data migration: the new `snapshots` folder is created on first start.
+
 ## 1.1.0 - 2026-11-17
 Mods now warn you when the core mod they depend on is off.
 - The app looks at the files inside each mod and guesses which core mod it needs: Redscript, ArchiveXL, TweakXL, RED4ext, Cyber Engine Tweaks, Input Loader or Audioware. Turn a mod on while its core mod is off and the row says "Needs ...". Turn a core mod off while something that is on needs it and that row says "Needed by ...". The Review changes window lists the same warnings.

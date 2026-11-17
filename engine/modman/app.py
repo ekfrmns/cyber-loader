@@ -11,6 +11,7 @@ from .deploy import (Entry, Plan, State, _identical, _stat, apply_plan, build_de
                      intact, make_plan, preflight)
 from .library import Library, clean_name, normalize_root
 from .profiles import Profiles
+from .snapshots import Snapshots, describe, parse_origin
 from .util import key, read_json, write_json
 
 
@@ -30,6 +31,7 @@ class App:
         self.library.scan()
         self.profiles = Profiles(cfg.profiles_dir, cfg.state_dir / "session.json")
         self.state = State(cfg.state_dir / "deployed.json")
+        self.snapshots = Snapshots(cfg.snapshots_dir)
         if not self.profiles.names():       # first run: start with one empty profile (= the plain game)
             self.profiles.save("Empty", [])
             self.profiles.set_current("Empty")
@@ -136,6 +138,29 @@ class App:
                                   self.library.auto_requires(self.library.mods[mod_id]))
             return {"ok": True, "mod": view, "warnings": sorted(set(warns))}
 
+    def set_requires(self, mod_id: str, requires) -> dict:
+        """Set the mods that `mod_id` needs (the hand-made list). Only the mod's own `.mod.json` changes, never the game."""
+        with self.lock:
+            m = self.library.mods.get(mod_id)
+            if m is None:
+                raise ApiError(404, f"unknown mod: {mod_id}")
+            if not isinstance(requires, list) or not all(isinstance(r, str) for r in requires):
+                raise ApiError(400, "requires must be a list of mod ids")
+            clean = []
+            for r in requires:
+                if r == mod_id:
+                    raise ApiError(400, f"“{m.name}” cannot need itself")
+                if r not in self.library.mods:
+                    raise ApiError(400, f"unknown mod: {r}")
+                if r not in clean:
+                    clean.append(r)
+            self.library.write_meta(mod_id, requires=clean)
+            m.requires = clean
+            _, conflicts = build_desired(self.library, self.working)
+            view = self._mod_view(m, set(self.working), self.state.deployed_mods(), conflict_counts(conflicts),
+                                  self.library.auto_requires(m))
+            return {"ok": True, "mod": view, "warnings": sorted({t for mid, _, t in self._warning_items() if mid == mod_id})}
+
     def select_profile(self, name: str) -> dict:
         with self.lock:
             if not self.profiles.exists(name):
@@ -230,9 +255,10 @@ class App:
                                     f"for example {plan.blocked[0]['rel']}. Nothing was changed.")
             self.job = {"state": "running", "percent": 0, "text": "Starting"}
             profile = self.current
-        threading.Thread(target=self._run_apply, args=(plan, profile), daemon=True).start()
+            ids = list(self.working)
+        threading.Thread(target=self._run_apply, args=(plan, profile, ids), daemon=True).start()
 
-    def _run_apply(self, plan, profile) -> None:
+    def _run_apply(self, plan, profile, ids=None) -> None:
         stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
         logf = open(self.cfg.logs_dir / f"apply-{stamp}.log", "w", encoding="utf-8")
 
@@ -250,6 +276,7 @@ class App:
             if res["errors"]:
                 self.job = {"state": "error", "percent": 100, "text": f"{len(res['errors'])} problem(s); see logs\\apply-{stamp}.log"}
             else:
+                self._auto_snapshot(ids, profile, log)
                 self.job = {"state": "done", "percent": 100, "text": "Done"}
         except Exception as ex:  # keep the server alive; the log has the details
             log(f"FATAL {ex!r}")
@@ -267,7 +294,116 @@ class App:
         res = apply_plan(self.cfg, plan, self.state, progress, log)
         self.state.profile = self.current
         self.state.save()
+        if not res.get("errors"):
+            self._auto_snapshot(list(self.working), self.current)
         return res
+
+    # ------------------------------------------------------------ setup history (snapshots)
+    def _snapshot_mods(self, ids) -> list:
+        return [describe(self.library.mods[i]) for i in ids if i in self.library.mods]
+
+    def _auto_snapshot(self, ids, profile, log=None) -> None:
+        """After a good apply: remember this setup. Never lets a problem here break the apply."""
+        try:
+            mods = self._snapshot_mods(ids or [])
+            if not self.snapshots.same_as_latest(mods, profile):
+                self.snapshots.save(mods, profile, auto=True)
+        except Exception as ex:
+            if log:
+                log(f"snapshot not saved: {ex!r}")
+
+    def _changed_since(self, m: dict) -> bool:
+        cur = self.library.mods.get(m["id"])
+        return cur is not None and (len(cur.files) != m.get("files") or cur.size != m.get("size"))
+
+    def list_snapshots(self) -> dict:
+        with self.lock:
+            now = set(self.working)
+            items = []
+            for s in self.snapshots.all():
+                ids = [m["id"] for m in s["mods"]]
+                items.append({"id": s["id"], "at": s["at"], "profile": s.get("profile"), "auto": bool(s.get("auto")),
+                              "pinned": bool(s.get("pinned")), "name": s.get("name"), "count": len(ids),
+                              "turnOn": sum(1 for i in ids if i not in now and i in self.library.mods),
+                              "turnOff": len(now - set(ids)),
+                              "missing": sum(1 for i in ids if i not in self.library.mods),
+                              "changed": sum(1 for m in s["mods"] if self._changed_since(m))})
+            return {"items": items}
+
+    def _trash_ids(self) -> dict:
+        """mod id -> trash id for every mod currently in the in-app trash."""
+        out = {}
+        if self.trash_root.exists():
+            for d in self.trash_root.iterdir():
+                meta = read_json(d / "trash.json") if d.is_dir() and self._TRASH_ID.match(d.name) else None
+                if meta and meta.get("id"):
+                    out[meta["id"]] = d.name
+        return out
+
+    def get_snapshot(self, sid: str) -> dict:
+        """One snapshot with, for each mod, how it compares to the library now (same / changed / missing)."""
+        with self.lock:
+            try:
+                s = self.snapshots.load(sid)
+            except KeyError as ex:
+                raise ApiError(404, str(ex).strip("'\""))
+            now = set(self.working)
+            trash = self._trash_ids()
+            by_nexus: dict = {}
+            for m in self.library.mods.values():
+                n = parse_origin(m.id).get("nexusId")
+                if n:
+                    by_nexus.setdefault(n, []).append(m)
+            mods = []
+            for m in s["mods"]:
+                row = {k: m.get(k) for k in ("id", "name", "version", "date", "nexusId")}
+                row["on"] = m["id"] in now
+                if m["id"] not in self.library.mods:
+                    row["status"] = "missing"
+                    row["inTrash"] = m["id"] in trash
+                    # the same Nexus mod under another folder = the updated version
+                    repl = [x for x in by_nexus.get(m.get("nexusId"), []) if x.id != m["id"]]
+                    if repl:
+                        o = parse_origin(repl[0].id)
+                        row["replacedBy"] = {"id": repl[0].id, "name": repl[0].name, "version": o.get("version"), "date": o.get("date")}
+                else:
+                    row["status"] = "changed" if self._changed_since(m) else "same"
+                mods.append(row)
+            return {"id": s["id"], "at": s["at"], "profile": s.get("profile"), "auto": bool(s.get("auto")),
+                    "pinned": bool(s.get("pinned")), "name": s.get("name"), "mods": mods}
+
+    def save_snapshot(self, name: str = "") -> dict:
+        """Keep the mods that are on right now (the staged set) under a name. Named snapshots are never cleaned up."""
+        with self.lock:
+            sid = self.snapshots.save(self._snapshot_mods(self.working), self.current, auto=False, name=name)
+            self.snapshots.pin(sid, True)
+            return {"ok": True, "id": sid}
+
+    def pin_snapshot(self, sid: str, pinned: bool, name=None) -> dict:
+        with self.lock:
+            try:
+                d = self.snapshots.pin(sid, pinned, name)
+            except KeyError as ex:
+                raise ApiError(404, str(ex).strip("'\""))
+            return {"ok": True, "pinned": d["pinned"], "name": d["name"]}
+
+    def restore_snapshot(self, sid: str) -> dict:
+        """Stage an older setup: the mod list becomes exactly that one (mods no longer in the library are skipped and named).
+        Nothing in the game changes until the usual Review and Apply."""
+        with self.lock:
+            if self.job["state"] == "running":
+                raise ApiError(423, "another apply is running")
+            try:
+                s = self.snapshots.load(sid)
+            except KeyError as ex:
+                raise ApiError(404, str(ex).strip("'\""))
+            self.working = [m["id"] for m in s["mods"] if m["id"] in self.library.mods]
+            view = self.state_view()
+            view["restored"] = {"count": len(self.working),
+                                "missing": [{k: m.get(k) for k in ("name", "version", "date", "nexusId")}
+                                            for m in s["mods"] if m["id"] not in self.library.mods],
+                                "changed": sum(1 for m in s["mods"] if self._changed_since(m))}
+            return view
 
     # ------------------------------------------------------------ import
     def import_path(self, path: str, name: str | None = None) -> dict:

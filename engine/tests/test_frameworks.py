@@ -130,5 +130,46 @@ class AppTest(unittest.TestCase):
         self.assertEqual(r["warnings"], ["Styled needs ArchiveXL, which is off"])
 
 
+class SetRequiresTest(unittest.TestCase):
+    """The manual "needs" list (the picker in the UI). Same sandbox library as AppTest, own test cases."""
+    setUp, tearDown, mod = AppTest.setUp, AppTest.tearDown, AppTest.mod
+
+    def test_saves_to_the_mods_meta_file_and_survives_a_rescan(self):
+        r = self.app.set_requires("Plain", ["Redscript", "Redscript", "Red4ext Core"])
+        self.assertEqual(r["mod"]["requires"], ["Redscript", "Red4ext Core"])      # duplicate dropped, order kept
+        import json
+        meta = json.loads((self.app.library.root / "Plain" / ".mod.json").read_text(encoding="utf-8"))
+        self.assertEqual(meta["requires"], ["Redscript", "Red4ext Core"])
+        self.app.library.scan()
+        self.assertEqual(self.mod("Plain")["requires"], ["Redscript", "Red4ext Core"])
+
+    def test_never_touches_the_mods_files_or_the_game(self):
+        before = sorted(str(p.relative_to(self.app.library.root / "Plain")) for p in (self.app.library.root / "Plain").rglob("*") if p.is_file())
+        self.app.set_requires("Plain", ["Redscript"])
+        self.assertEqual(self.mod("Plain")["files"], 1)       # .mod.json is not a mod file
+        self.assertEqual(before, [r"archive\pc\mod\plain.archive"])
+        self.assertEqual(list((self.tmp / "game").rglob("*.archive")), [])
+
+    def test_warns_when_the_chosen_mod_is_off_and_clears_when_on(self):
+        self.app.toggle("Plain", True)
+        r = self.app.set_requires("Plain", ["Redscript"])
+        self.assertEqual(r["warnings"], ["Plain needs Redscript, which is off"])
+        self.app.toggle("Redscript", True)
+        self.assertEqual(self.app.set_requires("Plain", ["Redscript"])["warnings"], [])
+
+    def test_empty_list_clears_it(self):
+        self.app.set_requires("Plain", ["Redscript"])
+        self.assertEqual(self.app.set_requires("Plain", [])["mod"]["requires"], [])
+
+    def test_rejects_bad_input(self):
+        from modman.app import ApiError
+        for mid, req, code in [("Nope", [], 404), ("Plain", ["Plain"], 400), ("Plain", ["Nope"], 400),
+                               ("Plain", "Redscript", 400), ("Plain", [1], 400)]:
+            with self.assertRaises(ApiError) as cm:
+                self.app.set_requires(mid, req)
+            self.assertEqual(cm.exception.code, code, (mid, req))
+        self.assertEqual(self.mod("Plain")["requires"], [])    # nothing was saved
+
+
 if __name__ == "__main__":
     unittest.main()

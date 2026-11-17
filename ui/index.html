@@ -176,6 +176,45 @@
   </footer>
 </section>
 
+<!-- Setup history (snapshots) -->
+<section id="historySheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="hsTitle" hidden>
+  <header class="sheet-head">
+    <div>
+      <h2 class="sheet-title" id="hsTitle">Setup history</h2>
+      <p class="sheet-sub" id="hsSub">A setup is saved every time you apply. Restore one to get that list of mods back.</p>
+    </div>
+    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
+  </header>
+  <div class="sheet-body" id="hsBody"></div>
+  <footer class="sheet-foot">
+    <span class="spacer"></span>
+    <button class="btn" id="hsSave" type="button">Keep current setup…</button>
+  </footer>
+</section>
+
+<!-- What a mod needs (the manual "needs" list) -->
+<section id="needsSheet" class="sheet sheet-sm" role="dialog" aria-modal="true" aria-labelledby="ndTitle" hidden>
+  <header class="sheet-head">
+    <div>
+      <h2 class="sheet-title" id="ndTitle">What does this mod need?</h2>
+      <p class="sheet-sub" id="ndSub">Pick the mods it can’t work without. You get a warning when one of them is off.</p>
+    </div>
+    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
+  </header>
+  <div class="sheet-body needs-body">
+    <p class="needs-auto" id="ndAuto" hidden></p>
+    <label class="input-field needs-search"><span>Find a mod</span><input id="ndSearch" type="search" autocomplete="off" spellcheck="false" placeholder="Type to filter"></label>
+    <div class="needs-list" id="ndList" role="group" aria-label="Mods"></div>
+    <p class="trash-empty" id="ndNone" hidden>No mod matches.</p>
+  </div>
+  <footer class="sheet-foot">
+    <span class="foot-reason" id="ndCount"></span>
+    <span class="spacer"></span>
+    <button class="btn" type="button" data-close>Cancel</button>
+    <button class="btn btn-primary" id="ndSave" type="button">Save</button>
+  </footer>
+</section>
+
 <!-- Generic confirm / prompt dialog, filled by ui.js -->
 <section id="dialog" class="sheet sheet-dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle" hidden></section>
 

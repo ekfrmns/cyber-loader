@@ -788,7 +788,7 @@ function renderProfileMenu() {
 function renderMoreMenu() {
   const item = (act, ic, label) =>
     `<button class="menu-item" type="button" role="menuitem" data-act="${act}" tabindex="-1">${icon(ic, 18)}<span class="label"><span>${esc(label)}</span></span></button>`;
-  $('#moreMenu').innerHTML = [item('trash', 'trash', 'Deleted mods…'), item('appearance', 'appearance', 'Appearance…')].join('');
+  $('#moreMenu').innerHTML = [item('history', 'restore', 'Setup history…'), item('trash', 'trash', 'Deleted mods…'), item('appearance', 'appearance', 'Appearance…')].join('');
 }
 
 // ---------- Deleting mods: an in-app trash ----------
@@ -893,8 +893,245 @@ function openRowMenu(li, x) {
   if (!m) return;
   const menu = $('#rowMenu');
   menu.dataset.id = id;
-  menu.innerHTML = `<button class="menu-item is-danger" type="button" role="menuitem" data-row-act="delete" tabindex="-1">${icon('trash', 18)}<span class="label"><span>Move “${esc(m.name)}” to trash…</span></span></button>`;
+  menu.innerHTML = `<button class="menu-item" type="button" role="menuitem" data-row-act="needs" tabindex="-1">${icon('core', 18)}<span class="label"><span>What it needs…</span></span></button>
+    <div class="menu-sep" role="separator"></div>
+    <button class="menu-item is-danger" type="button" role="menuitem" data-row-act="delete" tabindex="-1">${icon('trash', 18)}<span class="label"><span>Move “${esc(m.name)}” to trash…</span></span></button>`;
   openPopover(menu, li.querySelector('.switch') || li, { align: 'end' });
+}
+
+// ---------- Setup history: snapshots saved after every apply ----------
+const fmtWhen = (at) => {
+  const d = new Date(String(at).replace(' ', 'T'));
+  return Number.isNaN(d.getTime()) ? String(at) : d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+const fmtDay = (day) => {
+  const d = new Date(`${day}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+};
+const nexusUrl = (id) => `https://www.nexusmods.com/cyberpunk2077/mods/${id}`;
+const histOpen = new Set();   // snapshot ids whose details are showing
+
+function histTitle(i) { return i.name || `Applied ${fmtWhen(i.at)}`; }
+
+function histRowHTML(i) {
+  const bits = [];
+  if (i.name) bits.push(esc(fmtWhen(i.at)));
+  bits.push(esc(i.profile || 'No profile'), `${plural(i.count, 'mod')} on`);
+  const diff = [];
+  if (i.turnOn) diff.push(`Turns on ${plural(i.turnOn, 'mod')}`);
+  if (i.turnOff) diff.push(`Turns off ${plural(i.turnOff, 'mod')}`);
+  const flags = [];
+  if (i.missing) flags.push(`<span class="hist-flag">${plural(i.missing, 'mod')} not in your library now</span>`);
+  if (i.changed) flags.push(`<span class="hist-flag">${plural(i.changed, 'mod')} changed since</span>`);
+  const open = histOpen.has(i.id);
+  return `<div class="hist-row" data-snap="${esc(i.id)}">
+    <div class="hist-main">
+      <div class="hist-text">
+        <div class="hist-title">${esc(histTitle(i))}${i.pinned ? '<span class="needs-tag">Kept</span>' : ''}</div>
+        <div class="hist-meta">${bits.join('<span class="sep" aria-hidden="true"> · </span>')}</div>
+        <div class="hist-meta">${diff.length ? esc(diff.join(' · ')) : 'Same mods as now'}</div>
+        ${flags.length ? `<div class="hist-flags">${flags.join('')}</div>` : ''}
+      </div>
+      <div class="hist-actions">
+        <button class="btn btn-quiet" type="button" data-hist-act="details" aria-expanded="${open}">${open ? 'Hide details' : 'Details'}</button>
+        <button class="btn btn-quiet" type="button" data-hist-act="restore">Restore</button>
+      </div>
+    </div>
+    <div class="hist-detail" ${open ? '' : 'hidden'}></div>
+  </div>`;
+}
+
+function histDetailHTML(d) {
+  const differs = d.mods.filter((m) => m.status !== 'same');
+  const same = d.mods.length - differs.length;
+  const line = (m) => {
+    const ver = m.version ? `version ${esc(m.version)}` : '';
+    const when = m.date ? ` (${esc(fmtDay(m.date))})` : '';
+    const nx = m.nexusId ? `<button class="link-btn" type="button" data-hist-act="copy" data-url="${esc(nexusUrl(m.nexusId))}">Copy Nexus link (mod ${m.nexusId})</button>` : '';
+    if (m.status === 'changed') {
+      return `<li><b>${esc(m.name)}</b>: its files changed since this setup${ver ? ` (it was ${ver}${m.date ? `, ${esc(fmtDay(m.date))}` : ''})` : ''}. ${nx}</li>`;
+    }
+    const now = m.replacedBy
+      ? `You have ${m.replacedBy.version ? `version ${esc(m.replacedBy.version)}` : 'a newer copy'}${m.replacedBy.date ? ` (${esc(fmtDay(m.replacedBy.date))})` : ''} now.`
+      : m.inTrash ? 'It is in Deleted mods, restore it from there.' : 'It is not in your library any more.';
+    return `<li><b>${esc(m.name)}</b>: this setup used ${ver ? `${ver}${when}` : 'an older copy'}. ${now} ${nx}</li>`;
+  };
+  const actions = d.pinned
+    ? '<button class="btn btn-quiet" type="button" data-hist-act="rename">Rename</button><button class="btn btn-quiet" type="button" data-hist-act="unkeep">Stop keeping</button>'
+    : '<button class="btn btn-quiet" type="button" data-hist-act="keep">Keep this one…</button>';
+  return `${differs.length ? `<p class="hist-lead">Different from your library now</p><ul class="hist-list">${differs.map(line).join('')}</ul>` : '<p class="hist-lead">Every mod in it is in your library, unchanged.</p>'}
+    <p class="hist-meta">${same ? `${plural(same, 'other mod')} unchanged. ` : ''}${d.pinned ? 'Kept: it is never cleaned up.' : 'Older automatic setups are moved aside after 100.'}</p>
+    <div class="hist-detail-actions">${actions}</div>`;
+}
+
+function histBodyHTML(items) {
+  $('#hsSub').textContent = items.length
+    ? `${plural(items.length, 'setup')}. A new one is saved every time you apply.`
+    : 'A setup is saved every time you apply. Restore one to get that list of mods back.';
+  if (!items.length) return '<p class="trash-empty">Nothing yet. Your first setup is saved the next time you apply.</p>';
+  return `<div class="hist-all">${items.map(histRowHTML).join('')}</div>`;
+}
+
+async function loadHistory() {
+  const r = await api.get('/api/snapshots');
+  S.history = r.items;
+  $('#hsBody').innerHTML = histBodyHTML(r.items);
+  for (const id of histOpen) fillHistDetail(id);
+  return r;
+}
+
+async function fillHistDetail(id) {
+  const row = $(`#hsBody [data-snap="${CSS.escape(id)}"]`);
+  if (!row) return;
+  const box = row.querySelector('.hist-detail');
+  try {
+    box.innerHTML = histDetailHTML(await api.get(`/api/snapshots/${id}`));
+  } catch (e) {
+    box.innerHTML = `<p class="hist-meta">${esc(e.message)}</p>`;
+  }
+}
+
+async function openHistory(trigger) {
+  histOpen.clear();
+  await loadHistory();
+  openModal($('#historySheet'), { trigger, initialFocus: '[data-close]' });
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+
+async function historyClick(e) {
+  const b = e.target.closest('[data-hist-act]');
+  if (!b) return;
+  const row = b.closest('[data-snap]');
+  const id = row?.dataset.snap;
+  const item = S.history?.find((i) => i.id === id);
+  const act = b.dataset.histAct;
+  try {
+    if (act === 'details') {
+      const detail = row.querySelector('.hist-detail');
+      const open = detail.hidden;
+      detail.hidden = !open;
+      b.textContent = open ? 'Hide details' : 'Details';
+      b.setAttribute('aria-expanded', String(open));
+      if (open) { histOpen.add(id); detail.innerHTML = '<p class="hist-meta">Loading…</p>'; await fillHistDetail(id); } else histOpen.delete(id);
+    } else if (act === 'copy') {
+      toast((await copyText(b.dataset.url)) ? 'Link copied' : b.dataset.url, { tone: 'ok', timeout: 5000 });
+    } else if (act === 'restore' && item) {
+      const extra = item.missing ? `${plural(item.missing, 'mod')} from it ${item.missing === 1 ? 'is' : 'are'} not in your library any more and will be skipped (Details shows which).` : '';
+      const r = await dialog({
+        title: `Go back to “${histTitle(item)}”?`,
+        message: `Your mod list becomes the one from that setup. Nothing in the game changes until you review and apply. ${extra}`.trim(),
+        confirm: 'Restore', trigger: b,
+      });
+      if (!r) return;
+      const next = await api.post('/api/snapshots/restore', { id });
+      setState(next);
+      closeTop();
+      render();
+      const res = next.restored || {};
+      const skipped = res.missing?.length || 0;
+      toast(skipped ? `Restored, but ${plural(skipped, 'mod')} could not come back. Check Setup history.` : 'Restored. Review changes to apply it.',
+        { tone: skipped ? 'warn' : 'ok', timeout: 6000 });
+    } else if (act === 'keep' || act === 'rename') {
+      const r = await dialog({
+        title: act === 'keep' ? 'Keep this setup' : 'Rename this setup',
+        message: act === 'keep' ? 'A kept setup is never cleaned up.' : '',
+        input: { label: 'Name', value: act === 'rename' ? (item?.name || '') : '' }, confirm: act === 'keep' ? 'Keep' : 'Rename', trigger: b,
+        validate: (v) => (v ? null : 'Give it a name, like “works before the patch”.'),
+      });
+      if (!r) return;
+      await api.post('/api/snapshots/pin', { id, pinned: true, name: r.value });
+      await loadHistory();
+    } else if (act === 'unkeep') {
+      await api.post('/api/snapshots/pin', { id, pinned: false, name: '' });
+      await loadHistory();
+    }
+  } catch (err) {
+    toast(err.message, { tone: 'error', timeout: 6000 });
+  }
+}
+
+async function keepCurrentSetup(trigger) {
+  try {
+    const r = await dialog({
+      title: 'Keep the current setup', message: 'Saves the mods that are on right now, under a name, so you can come back to it later.',
+      input: { label: 'Name', value: '' }, confirm: 'Keep', trigger,
+      validate: (v) => (v ? null : 'Give it a name, like “works before the patch”.'),
+    });
+    if (!r) return;
+    await api.post('/api/snapshots/save', { name: r.value });
+    await loadHistory();
+    toast(`Kept “${r.value}”`, { tone: 'ok' });
+  } catch (e) {
+    toast(e.message, { tone: 'error', timeout: 6000 });
+  }
+}
+
+// ---------- What a mod needs: the manual list (the app also guesses some from the mod's files) ----------
+const needsState = { id: null, picked: new Set(), start: '' };
+
+function needsRowsHTML(m) {
+  // Picked first, then core mods, then the rest by name. The mod itself is never offered.
+  const others = mods().filter((x) => x.id !== m.id);
+  const rank = (x) => (needsState.picked.has(x.id) ? 0 : x.framework ? 1 : 2);
+  others.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  return others.map((x) => `
+    <label class="check needs-row" data-name="${esc(x.name.toLowerCase())}">
+      <input type="checkbox" value="${esc(x.id)}" ${needsState.picked.has(x.id) ? 'checked' : ''}>
+      <span class="needs-name" title="${esc(x.name)}">${esc(x.name)}</span>${x.framework ? `<span class="needs-tag">Core</span>` : ''}
+    </label>`).join('');
+}
+
+function needsRefreshFooter() {
+  const n = needsState.picked.size;
+  $('#ndCount').textContent = n ? `${n} selected` : 'Nothing selected';
+  $('#ndCount').style.color = 'var(--text-2)';
+  $('#ndSave').disabled = [...needsState.picked].sort().join('\n') === needsState.start;
+}
+
+function openNeeds(id, trigger) {
+  const m = byId(id);
+  if (!m) return;
+  needsState.id = id;
+  needsState.picked = new Set((m.requires || []).filter((r) => byId(r)));
+  needsState.start = [...needsState.picked].sort().join('\n');
+  $('#ndTitle').textContent = `What does “${m.name}” need?`;
+  const auto = (m.autoRequires || []).map((n) => n.name);
+  const autoEl = $('#ndAuto');
+  autoEl.hidden = !auto.length;
+  autoEl.textContent = auto.length ? `Found automatically from its files: ${auto.join(', ')}. You don’t need to add those.` : '';
+  $('#ndSearch').value = '';
+  $('#ndList').innerHTML = needsRowsHTML(m);
+  $('#ndNone').hidden = true;
+  needsRefreshFooter();
+  openModal($('#needsSheet'), { trigger, initialFocus: '#ndSearch' });
+}
+
+function needsFilter() {
+  const q = $('#ndSearch').value.trim().toLowerCase();
+  let shown = 0;
+  for (const row of $('#ndList').children) {
+    const hit = !q || row.dataset.name.includes(q);
+    row.hidden = !hit;
+    if (hit) shown++;
+  }
+  $('#ndNone').hidden = shown > 0;
+}
+
+async function saveNeeds(trigger) {
+  const m = byId(needsState.id);
+  if (!m) return;
+  try {
+    const r = await api.post('/api/mod/requires', { id: m.id, requires: [...needsState.picked] });
+    closeTop();
+    await refresh();
+    const n = r.mod.requires.length;
+    toast(n ? `“${m.name}” needs ${n} ${n === 1 ? 'mod' : 'mods'} now` : `“${m.name}” has no hand-picked needs now`, { tone: 'ok' });
+  } catch (e) {
+    toast(e.message, { tone: 'error', timeout: 6000 });
+  }
 }
 
 async function selectProfile(name, trigger) {
@@ -981,7 +1218,9 @@ async function profileAction(act, name, trigger) {
 
 async function runMenuAction(act, trigger) {
   try {
-    if (act === 'trash') {
+    if (act === 'history') {
+      await openHistory(trigger);
+    } else if (act === 'trash') {
       await openTrash(trigger);
     } else if (act === 'appearance') {
       syncSettingsForm();
@@ -1129,7 +1368,17 @@ function wire() {
     const id = $('#rowMenu').dataset.id;
     closePopovers(true);
     if (b.dataset.rowAct === 'delete') deleteMod(id, document.activeElement);
+    else if (b.dataset.rowAct === 'needs') openNeeds(id, document.activeElement);
   });
+  $('#ndList').addEventListener('change', (e) => {
+    if (e.target.type !== 'checkbox') return;
+    if (e.target.checked) needsState.picked.add(e.target.value); else needsState.picked.delete(e.target.value);
+    needsRefreshFooter();
+  });
+  $('#ndSearch').addEventListener('input', needsFilter);
+  $('#ndSave').addEventListener('click', (e) => saveNeeds(e.currentTarget));
+  $('#historySheet').addEventListener('click', historyClick);
+  $('#hsSave').addEventListener('click', (e) => keepCurrentSetup(e.currentTarget));
   $('#trashSheet').addEventListener('click', trashClick);
   $('#trEmpty').addEventListener('click', (e) => emptyTrash(e.currentTarget));
   list.addEventListener('keydown', (e) => {

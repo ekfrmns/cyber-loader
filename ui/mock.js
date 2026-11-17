@@ -223,6 +223,30 @@ function conflictsOf(id) {
   return n;
 }
 
+// Sample setup history (docs/API.md "Setup history"). Mods whose id is not in the sample library count as "missing".
+const nm = (id) => byId.get(id)?.name || id;
+const snapMod = (id, extra = {}) => ({ id, name: nm(id), version: null, date: null, nexusId: null, files: byId.get(id)?.files || 0, ...extra });
+const SNAPS = [
+  { id: 's3', at: '2026-11-17 21:40:12', profile: 'Core + Vehicles + extras', auto: true, pinned: false, name: null,
+    mods: [snapMod('red4ext', { version: '1.31.0', date: '2026-10-02', nexusId: 2380 }), snapMod('archivexl', { version: '1.20.2', date: '2026-10-20', nexusId: 4198, changed: true }), snapMod('tweakxl')] },
+  { id: 's2', at: '2026-11-16 18:05:44', profile: 'Core + Vehicles + extras', auto: true, pinned: false, name: null,
+    mods: [snapMod('red4ext'), snapMod('old-key-loader', { name: 'Key Binding Loader', version: '0.2.6', date: '2026-10-26', nexusId: 4575 }), snapMod('tweakxl'), snapMod('old-radio', { name: 'Radio Pack (removed)', version: null, nexusId: null })] },
+  { id: 's1', at: '2026-11-15 22:10:03', profile: 'Core + Vehicles + extras', auto: false, pinned: true, name: 'Works before the patch',
+    mods: [snapMod('red4ext'), snapMod('archivexl'), snapMod('redscript')] },
+];
+const snapStatus = (m) => (!byId.has(m.id) ? 'missing' : m.changed ? 'changed' : 'same');
+function snapItem(s) {
+  const ids = s.mods.map((m) => m.id);
+  return { id: s.id, at: s.at, profile: s.profile, auto: s.auto, pinned: s.pinned, name: s.name, count: ids.length,
+    turnOn: ids.filter((i) => byId.has(i) && !enabled.has(i)).length, turnOff: [...enabled].filter((i) => !ids.includes(i)).length,
+    missing: ids.filter((i) => !byId.has(i)).length, changed: s.mods.filter((m) => m.changed && byId.has(m.id)).length };
+}
+function snapDetail(s) {
+  return { id: s.id, at: s.at, profile: s.profile, auto: s.auto, pinned: s.pinned, name: s.name,
+    mods: s.mods.map((m) => ({ id: m.id, name: m.name, version: m.version, date: m.date, nexusId: m.nexusId, on: enabled.has(m.id), status: snapStatus(m),
+      ...(snapStatus(m) === 'missing' && m.id === 'old-key-loader' ? { replacedBy: { id: 'inputloader', name: 'Key Binding Loader', version: '0.2.7', date: '2026-11-02' } } : {}) })) };
+}
+
 function view(m) {
   const on = enabled.has(m.id);
   return { id: m.id, name: m.name, group: m.group, files: m.files, enabled: on, pending: on === deployed.has(m.id) ? null : on ? 'on' : 'off', framework: m.framework, requires: [...m.requires], autoRequires: m.autoRequires.map((n) => ({ name: n.name, ids: [...n.ids] })), conflicts: conflictsOf(m.id) };
@@ -286,9 +310,48 @@ export async function handle(method, url, body = {}) {
 
   if (q.has('fail') && route === 'GET /api/state') return err(500, 'The engine couldn’t read the mod library at C:\\CyberLoader\\data\\library (mock failure).');
 
+  if (method === 'GET' && path.startsWith('/api/snapshots/')) {
+    const s = SNAPS.find((x) => x.id === path.slice('/api/snapshots/'.length));
+    return s ? ok(snapDetail(s)) : err(404, 'that snapshot no longer exists');
+  }
+
   switch (route) {
     case 'GET /api/state':
       return ok(state());
+
+    case 'GET /api/snapshots':
+      return ok({ items: SNAPS.map(snapItem) });
+
+    case 'POST /api/snapshots/save': {
+      const mods = [...enabled].map((id) => ({ id, name: nameOf(id), version: null, date: null, nexusId: null, files: byId.get(id)?.files || 0 }));
+      SNAPS.unshift({ id: `s${Date.now()}`, at: new Date().toISOString().slice(0, 19).replace('T', ' '), profile: current, auto: false, pinned: true, name: body.name || 'Kept setup', mods });
+      return ok({ ok: true, id: SNAPS[0].id });
+    }
+
+    case 'POST /api/snapshots/pin': {
+      const s = SNAPS.find((x) => x.id === body.id);
+      if (!s) return err(404, 'that snapshot no longer exists');
+      s.pinned = body.pinned !== false;
+      if (body.name !== undefined) s.name = body.name || null;
+      return ok({ ok: true, pinned: s.pinned, name: s.name });
+    }
+
+    case 'POST /api/snapshots/restore': {
+      const s = SNAPS.find((x) => x.id === body.id);
+      if (!s) return err(404, 'that snapshot no longer exists');
+      const keep = s.mods.filter((m) => byId.has(m.id));
+      enabled = new Set(keep.map((m) => m.id));
+      return ok({ ...state(), restored: { count: keep.length, missing: s.mods.filter((m) => !byId.has(m.id)).map((m) => ({ name: m.name, version: m.version, date: m.date, nexusId: m.nexusId })), changed: s.mods.filter((m) => m.changed).length } });
+    }
+
+    case 'POST /api/mod/requires': {
+      const m = byId.get(body.id);
+      if (!m) return err(404, 'That mod is no longer in the library.');
+      if (!Array.isArray(body.requires) || body.requires.some((r) => r === m.id || !byId.has(r))) return err(400, 'Pick other mods from the library.');
+      m.requires = [...new Set(body.requires)];
+      const w = enabled.has(m.id) ? m.requires.filter((r) => !enabled.has(r)).map((r) => `${m.name} needs ${nameOf(r)}, which is off`) : [];
+      return ok({ ok: true, mod: view(m), warnings: w });
+    }
 
     case 'POST /api/toggle': {
       const m = byId.get(body.id);

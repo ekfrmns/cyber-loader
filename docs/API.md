@@ -71,10 +71,37 @@ If the contract needs to change, the UI session writes the request to `docs/API-
     Deleting mods: an in-app trash. Nothing is erased until the trash is emptied. Profiles keep a deleted mod's entry,
     so restoring it puts it back into those profiles.
     POST /api/mod/delete        { id }                   -> { ok, trashId, name }   // 409 if the mod is in the game right now ("turn it off and apply first"), 404 unknown, 423 apply running
+    POST /api/mod/requires      { id, requires: string[] } -> { ok, mod: Mod, warnings: string[] }
+         Replaces the hand-made "needs" list of a mod (saved in that mod's `.mod.json`; nothing in the game folder changes).
+         404 unknown mod, 400 if an id is unknown, the mod needs itself, or `requires` is not a list of strings. Duplicates are dropped.
+         `warnings` are the unmet needs of this mod after the change, same text as /api/toggle.
     GET  /api/trash             -> { items: [{ id, name, group, files, size, deletedAt }], totalSize }   // newest first; id is the trash id
     POST /api/trash/restore     { id }                   -> { ok, id, name }        // back into the library; a name clash restores as "<name> (restored)"
     POST /api/trash/empty       { id? }                  -> { ok, removed, freed }  // one item, or the whole trash when id is omitted. Permanent.
 
+
+    Setup history (snapshots). A snapshot remembers which mods were on (in order), the profile, and for each mod its name,
+    file count, size and what its library folder name says about it (Nexus number, version, upload date). It holds no mod
+    files. One is saved automatically after every successful apply (skipped when identical to the newest one). Saves by hand
+    are named and kept; automatic ones beyond the newest 100 move to `snapshots\old` (never erased). Stored in `<data>\snapshots`.
+    GET  /api/snapshots         -> { items: [{ id, at, profile, auto, pinned, name|null, count,
+                                               turnOn,   // mods in it that are off now (and still in the library)
+                                               turnOff,  // mods that are on now but not in it
+                                               missing,  // its mods no longer in the library
+                                               changed   // its mods whose files changed since (file count or size differs)
+                                             }] }                // newest first
+    GET  /api/snapshots/<id>    -> { id, at, profile, auto, pinned, name, mods: [{ id, name, version|null, date|null, nexusId|null,
+                                      on: boolean,              // on right now
+                                      status: "same"|"changed"|"missing",
+                                      inTrash?: boolean,        // missing and sitting in the in-app trash
+                                      replacedBy?: { id, name, version, date } }] }   // missing, but the same Nexus number is in the library under another folder (the update)
+         404 unknown id. `version` is as written in the folder name ("0.2.6", or "2-0-1" for the older style); null when the folder name has none.
+         The Nexus page of a mod is https://www.nexusmods.com/cyberpunk2077/mods/<nexusId> (the app never contacts Nexus).
+    POST /api/snapshots/save    { name? }                -> { ok, id }    // keeps the mods that are on right now (staged set), named and pinned
+    POST /api/snapshots/pin     { id, pinned?, name? }   -> { ok, pinned, name }   // pinned/named ones are never moved aside; 404 unknown id
+    POST /api/snapshots/restore { id }                   -> /api/state shape + { restored: { count, missing: [{ name, version, date, nexusId }], changed } }
+         Stages that setup: the mod list becomes exactly the snapshot's (mods no longer in the library are skipped and listed in
+         `missing`). Nothing in the game changes until the usual preview + apply. 404 unknown id, 423 while an apply runs.
 
     GET  /api/settings          -> { theme: "system"|"light"|"dark", accent: "#rrggbb" }
     POST /api/settings          { theme?, accent? }       -> same shape
