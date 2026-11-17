@@ -75,6 +75,10 @@ If the contract needs to change, the UI session writes the request to `docs/API-
          Replaces the hand-made "needs" list of a mod (saved in that mod's `.mod.json`; nothing in the game folder changes).
          404 unknown mod, 400 if an id is unknown, the mod needs itself, or `requires` is not a list of strings. Duplicates are dropped.
          `warnings` are the unmet needs of this mod after the change, same text as /api/toggle.
+    POST /api/mod/group         { id, group }            -> { ok, mod: Mod }
+         Moves a mod to a category: "Framework"|"Body"|"Characters"|"Clothing"|"Gameplay"|"Content"|"Other". Saved in that mod's
+         `.mod.json` (and the framework flag follows: only "Framework" is a core dependency), so the name-based guess never
+         overrides it. 404 unknown mod, 400 unknown category.
     GET  /api/trash             -> { items: [{ id, name, group, files, size, deletedAt }], totalSize }   // newest first; id is the trash id
     POST /api/trash/restore     { id }                   -> { ok, id, name }        // back into the library; a name clash restores as "<name> (restored)"
     POST /api/trash/empty       { id? }                  -> { ok, removed, freed }  // one item, or the whole trash when id is omitted. Permanent.

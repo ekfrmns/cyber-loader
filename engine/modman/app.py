@@ -9,7 +9,7 @@ from . import __version__, msgpack_min
 from .config import Config
 from .deploy import (Entry, Plan, State, _identical, _stat, apply_plan, build_desired, conflict_counts, game_running,
                      intact, make_plan, preflight)
-from .library import Library, clean_name, normalize_root
+from .library import GROUPS, Library, clean_name, normalize_root
 from .profiles import Profiles
 from .snapshots import Snapshots, describe, parse_origin
 from .util import key, read_json, write_json
@@ -160,6 +160,20 @@ class App:
             view = self._mod_view(m, set(self.working), self.state.deployed_mods(), conflict_counts(conflicts),
                                   self.library.auto_requires(m))
             return {"ok": True, "mod": view, "warnings": sorted({t for mid, _, t in self._warning_items() if mid == mod_id})}
+
+    def set_group(self, mod_id: str, group: str) -> dict:
+        """Move a mod to a category. Saved in the mod's own `.mod.json`, so the name-based guess never overrides it again."""
+        with self.lock:
+            m = self.library.mods.get(mod_id)
+            if m is None:
+                raise ApiError(404, f"unknown mod: {mod_id}")
+            if group not in GROUPS:
+                raise ApiError(400, f"category must be one of: {', '.join(GROUPS)}")
+            self.library.write_meta(mod_id, group=group, framework=(group == "Framework"))
+            m.group, m.framework = group, group == "Framework"
+            _, conflicts = build_desired(self.library, self.working)
+            view = self._mod_view(m, set(self.working), self.state.deployed_mods(), conflict_counts(conflicts), self.library.auto_requires(m))
+            return {"ok": True, "mod": view}
 
     def select_profile(self, name: str) -> dict:
         with self.lock:

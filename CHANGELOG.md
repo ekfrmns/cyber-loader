@@ -2,6 +2,12 @@
 
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = changes that need your data migrated.
 
+## 1.3.0 - 2026-11-17
+Move a mod to another category.
+- Right-click a mod, **"Move to category…"**: pick Framework, Body, Characters, Clothing, Gameplay, Content or Other. The choice is saved in the mod's own `.mod.json`, so the name-based guess never overrides it again. Before this, a mod that matched no keyword stayed in Other with no way to move it.
+- The guess knows more names: tattoo, teeth, tooth, braces, grill and skin (as a whole word) now go to Body, and "UV Framework" goes to Framework.
+- API (additive, see `docs/API.md`): `POST /api/mod/group`. Nothing was removed or changed.
+
 ## 1.2.1 - 2026-11-17
 Setup history is simpler.
 - Removed the "Keep current setup" and "Keep this one" buttons. Saving a named list of mods is what profiles are for; setup history stays automatic, with just Details and Restore.

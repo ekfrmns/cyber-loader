@@ -894,6 +894,7 @@ function openRowMenu(li, x) {
   const menu = $('#rowMenu');
   menu.dataset.id = id;
   menu.innerHTML = `<button class="menu-item" type="button" role="menuitem" data-row-act="needs" tabindex="-1">${icon('core', 18)}<span class="label"><span>What it needs…</span></span></button>
+    <button class="menu-item" type="button" role="menuitem" data-row-act="group" tabindex="-1">${icon('other', 18)}<span class="label"><span>Move to category…</span></span></button>
     <div class="menu-sep" role="separator"></div>
     <button class="menu-item is-danger" type="button" role="menuitem" data-row-act="delete" tabindex="-1">${icon('trash', 18)}<span class="label"><span>Move “${esc(m.name)}” to trash…</span></span></button>`;
   openPopover(menu, li.querySelector('.switch') || li, { align: 'end' });
@@ -1033,6 +1034,36 @@ async function historyClick(e) {
     }
   } catch (err) {
     toast(err.message, { tone: 'error', timeout: 6000 });
+  }
+}
+
+// ---------- Move a mod to another category ----------
+function openGroupPicker(id, trigger) {
+  const m = byId(id);
+  if (!m) return;
+  const cur = GROUPS.includes(m.group) ? m.group : 'Other';
+  $('#gpTitle').textContent = `Where does “${m.name}” go?`;
+  $('#gpBody').innerHTML = `<div class="grp-list" role="group" aria-label="Categories">${GROUPS.map((g) => `
+    <button class="menu-item grp-item" type="button" data-group-pick="${g}" ${g === cur ? 'aria-current="true"' : ''}>
+      ${icon(GROUP_ICON[g] || 'other', 18)}<span class="label"><span>${g}</span></span>
+      <span class="check-slot">${g === cur ? icon('check', 16) : ''}</span>
+    </button>`).join('')}</div>`;
+  $('#gpBody').dataset.id = id;
+  openModal($('#groupSheet'), { trigger, initialFocus: '[aria-current="true"]' });
+}
+
+async function pickGroup(group) {
+  const id = $('#gpBody').dataset.id;
+  const m = byId(id);
+  if (!m) return;
+  if (m.group === group) { closeTop(); return; }
+  try {
+    await api.post('/api/mod/group', { id, group });
+    closeTop();
+    await refresh();
+    toast(`Moved “${m.name}” to ${group}`, { tone: 'ok' });
+  } catch (e) {
+    toast(e.message, { tone: 'error', timeout: 6000 });
   }
 }
 
@@ -1336,6 +1367,7 @@ function wire() {
     closePopovers(true);
     if (b.dataset.rowAct === 'delete') deleteMod(id, document.activeElement);
     else if (b.dataset.rowAct === 'needs') openNeeds(id, document.activeElement);
+    else if (b.dataset.rowAct === 'group') openGroupPicker(id, document.activeElement);
   });
   $('#ndList').addEventListener('change', (e) => {
     if (e.target.type !== 'checkbox') return;
@@ -1343,6 +1375,7 @@ function wire() {
     needsRefreshFooter();
   });
   $('#ndSearch').addEventListener('input', needsFilter);
+  $('#gpBody').addEventListener('click', (e) => { const b = e.target.closest('[data-group-pick]'); if (b) pickGroup(b.dataset.groupPick); });
   $('#ndSave').addEventListener('click', (e) => saveNeeds(e.currentTarget));
   $('#historySheet').addEventListener('click', historyClick);
   $('#trashSheet').addEventListener('click', trashClick);

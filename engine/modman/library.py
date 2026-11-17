@@ -17,12 +17,13 @@ _RE_NEXUS = re.compile(r"\s+\d{3,6}\s+[\dv][\w.\-]*\s+\d{4}-\d\d-\d\dT[\w-]+Z\s+
 _RE_NEXUS_OLD = re.compile(r"-\d{3,6}-[\w-]*-\d{9,}$")
 
 _FRAMEWORK = re.compile(
-    r"^(red4ext|redscript|codeware|archivexl|tweakxl|cet\b|cyber engine tweaks|mod settings|input loader|"
-    r"audioware|native settings|reddata|redfilesystem|red file system|simple video framework|"
+    r"^(?:\d+\.\s*)?(red4ext|redscript|codeware|archivexl|tweakxl|cet\b|cyber engine tweaks|mod settings|input loader|"
+    r"audioware|uv framework|native settings|reddata|redfilesystem|red file system|simple video framework|"
     r"custom map markers|native interactions framework|browserextensionframework|appearance runtime|"
     r"equipment-ex|cyberware-ex|virtual atelier$)", re.I)
+GROUPS = ("Framework", "Body", "Characters", "Clothing", "Gameplay", "Content", "Other")
 _GROUP_RULES = [
-    ("Body", re.compile(r"body|sp0|vtk|texture|physics|\blod\b|microdetail|reflections|palette|jiggle", re.I)),
+    ("Body", re.compile(r"body|sp0|vtk|texture|physics|\blod\b|microdetail|reflections|palette|jiggle|tattoo|tatoo|teeth|tooth|braces|grill|\bskins?\b", re.I)),
     ("Clothing", re.compile(r"dress|boots|jacket|suit|necklace|jewelry|pants|shirt|holster|atelier|\btags\b|bodysuit|bomber|fashion", re.I)),
     ("Gameplay", re.compile(r"cyberware|craft|weapon|silenc|knives|newgame|new game|sandevistan|first person|stats|upgrade|"
                             r"sell apartments|jump|airdrop|cyberpsycho|unequip|intro videos|"

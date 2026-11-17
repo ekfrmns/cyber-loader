@@ -172,6 +172,8 @@ def route(app: App, method: str, path: str, body: dict):
         return app.discard()
     if P == "/api/mod/delete":
         return app.delete_mod(str(body["id"]))
+    if P == "/api/mod/group":
+        return app.set_group(str(body["id"]), str(body.get("group", "")))
     if P == "/api/mod/requires":
         return app.set_requires(str(body["id"]), body.get("requires"))
     if P == "/api/snapshots/save":

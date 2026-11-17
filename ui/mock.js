@@ -330,6 +330,15 @@ export async function handle(method, url, body = {}) {
       return ok({ ...state(), restored: { count: keep.length, missing: s.mods.filter((m) => !byId.has(m.id)).map((m) => ({ name: m.name, version: m.version, date: m.date, nexusId: m.nexusId })), changed: s.mods.filter((m) => m.changed).length } });
     }
 
+    case 'POST /api/mod/group': {
+      const m = byId.get(body.id);
+      if (!m) return err(404, 'That mod is no longer in the library.');
+      if (!['Framework', 'Body', 'Characters', 'Clothing', 'Gameplay', 'Content', 'Other'].includes(body.group)) return err(400, 'Pick one of the categories.');
+      m.group = body.group;
+      m.framework = body.group === 'Framework';
+      return ok({ ok: true, mod: view(m) });
+    }
+
     case 'POST /api/mod/requires': {
       const m = byId.get(body.id);
       if (!m) return err(404, 'That mod is no longer in the library.');
