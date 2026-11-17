@@ -956,12 +956,8 @@ function histDetailHTML(d) {
       : m.inTrash ? 'It is in Deleted mods, restore it from there.' : 'It is not in your library any more.';
     return `<li><b>${esc(m.name)}</b>: this setup used ${ver ? `${ver}${when}` : 'an older copy'}. ${now} ${nx}</li>`;
   };
-  const actions = d.pinned
-    ? '<button class="btn btn-quiet" type="button" data-hist-act="rename">Rename</button><button class="btn btn-quiet" type="button" data-hist-act="unkeep">Stop keeping</button>'
-    : '<button class="btn btn-quiet" type="button" data-hist-act="keep">Keep this one…</button>';
   return `${differs.length ? `<p class="hist-lead">Different from your library now</p><ul class="hist-list">${differs.map(line).join('')}</ul>` : '<p class="hist-lead">Every mod in it is in your library, unchanged.</p>'}
-    <p class="hist-meta">${same ? `${plural(same, 'other mod')} unchanged. ` : ''}${d.pinned ? 'Kept: it is never cleaned up.' : 'Older automatic setups are moved aside after 100.'}</p>
-    <div class="hist-detail-actions">${actions}</div>`;
+    <p class="hist-meta">${same ? `${plural(same, 'other mod')} unchanged. ` : ''}Older setups are moved aside after the newest 200, never erased.</p>`;
 }
 
 function histBodyHTML(items) {
@@ -1034,38 +1030,9 @@ async function historyClick(e) {
       const skipped = res.missing?.length || 0;
       toast(skipped ? `Restored, but ${plural(skipped, 'mod')} could not come back. Check Setup history.` : 'Restored. Review changes to apply it.',
         { tone: skipped ? 'warn' : 'ok', timeout: 6000 });
-    } else if (act === 'keep' || act === 'rename') {
-      const r = await dialog({
-        title: act === 'keep' ? 'Keep this setup' : 'Rename this setup',
-        message: act === 'keep' ? 'A kept setup is never cleaned up.' : '',
-        input: { label: 'Name', value: act === 'rename' ? (item?.name || '') : '' }, confirm: act === 'keep' ? 'Keep' : 'Rename', trigger: b,
-        validate: (v) => (v ? null : 'Give it a name, like “works before the patch”.'),
-      });
-      if (!r) return;
-      await api.post('/api/snapshots/pin', { id, pinned: true, name: r.value });
-      await loadHistory();
-    } else if (act === 'unkeep') {
-      await api.post('/api/snapshots/pin', { id, pinned: false, name: '' });
-      await loadHistory();
     }
   } catch (err) {
     toast(err.message, { tone: 'error', timeout: 6000 });
-  }
-}
-
-async function keepCurrentSetup(trigger) {
-  try {
-    const r = await dialog({
-      title: 'Keep the current setup', message: 'Saves the mods that are on right now, under a name, so you can come back to it later.',
-      input: { label: 'Name', value: '' }, confirm: 'Keep', trigger,
-      validate: (v) => (v ? null : 'Give it a name, like “works before the patch”.'),
-    });
-    if (!r) return;
-    await api.post('/api/snapshots/save', { name: r.value });
-    await loadHistory();
-    toast(`Kept “${r.value}”`, { tone: 'ok' });
-  } catch (e) {
-    toast(e.message, { tone: 'error', timeout: 6000 });
   }
 }
 
@@ -1378,7 +1345,6 @@ function wire() {
   $('#ndSearch').addEventListener('input', needsFilter);
   $('#ndSave').addEventListener('click', (e) => saveNeeds(e.currentTarget));
   $('#historySheet').addEventListener('click', historyClick);
-  $('#hsSave').addEventListener('click', (e) => keepCurrentSetup(e.currentTarget));
   $('#trashSheet').addEventListener('click', trashClick);
   $('#trEmpty').addEventListener('click', (e) => emptyTrash(e.currentTarget));
   list.addEventListener('keydown', (e) => {

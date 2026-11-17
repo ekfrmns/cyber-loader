@@ -10,7 +10,7 @@ from pathlib import Path
 from .util import read_json, write_json
 
 _ID = re.compile(r"^\d{8}-\d{6}-[0-9a-f]{4}$")
-MAX_AUTO = 100   # older automatic snapshots beyond this are moved to `old\` (never deleted)
+MAX_AUTO = 200   # older automatic snapshots beyond this are moved to `old\` (never deleted)
 
 # Library folders made from a Nexus download carry the mod number, version and upload date:
 #   "<name> 4575 0.2.6 2026-10-26T08-38Z Q6xF6llYP"   (clear version)

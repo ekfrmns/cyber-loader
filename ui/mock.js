@@ -231,7 +231,7 @@ const SNAPS = [
     mods: [snapMod('red4ext', { version: '1.31.0', date: '2026-10-02', nexusId: 2380 }), snapMod('archivexl', { version: '1.20.2', date: '2026-10-20', nexusId: 4198, changed: true }), snapMod('tweakxl')] },
   { id: 's2', at: '2026-11-16 18:05:44', profile: 'Core + Vehicles + extras', auto: true, pinned: false, name: null,
     mods: [snapMod('red4ext'), snapMod('old-key-loader', { name: 'Key Binding Loader', version: '0.2.6', date: '2026-10-26', nexusId: 4575 }), snapMod('tweakxl'), snapMod('old-radio', { name: 'Radio Pack (removed)', version: null, nexusId: null })] },
-  { id: 's1', at: '2026-11-15 22:10:03', profile: 'Core + Vehicles + extras', auto: false, pinned: true, name: 'Works before the patch',
+  { id: 's1', at: '2026-11-15 22:10:03', profile: 'Core + Vehicles + extras', auto: true, pinned: false, name: null,
     mods: [snapMod('red4ext'), snapMod('archivexl'), snapMod('redscript')] },
 ];
 const snapStatus = (m) => (!byId.has(m.id) ? 'missing' : m.changed ? 'changed' : 'same');
@@ -321,20 +321,6 @@ export async function handle(method, url, body = {}) {
 
     case 'GET /api/snapshots':
       return ok({ items: SNAPS.map(snapItem) });
-
-    case 'POST /api/snapshots/save': {
-      const mods = [...enabled].map((id) => ({ id, name: nameOf(id), version: null, date: null, nexusId: null, files: byId.get(id)?.files || 0 }));
-      SNAPS.unshift({ id: `s${Date.now()}`, at: new Date().toISOString().slice(0, 19).replace('T', ' '), profile: current, auto: false, pinned: true, name: body.name || 'Kept setup', mods });
-      return ok({ ok: true, id: SNAPS[0].id });
-    }
-
-    case 'POST /api/snapshots/pin': {
-      const s = SNAPS.find((x) => x.id === body.id);
-      if (!s) return err(404, 'that snapshot no longer exists');
-      s.pinned = body.pinned !== false;
-      if (body.name !== undefined) s.name = body.name || null;
-      return ok({ ok: true, pinned: s.pinned, name: s.name });
-    }
 
     case 'POST /api/snapshots/restore': {
       const s = SNAPS.find((x) => x.id === body.id);

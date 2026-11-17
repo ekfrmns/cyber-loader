@@ -83,7 +83,7 @@ If the contract needs to change, the UI session writes the request to `docs/API-
     Setup history (snapshots). A snapshot remembers which mods were on (in order), the profile, and for each mod its name,
     file count, size and what its library folder name says about it (Nexus number, version, upload date). It holds no mod
     files. One is saved automatically after every successful apply (skipped when identical to the newest one). Saves by hand
-    are named and kept; automatic ones beyond the newest 100 move to `snapshots\old` (never erased). Stored in `<data>\snapshots`.
+    named ones are kept (the UI no longer offers naming: saving a named list is what profiles are for); automatic ones beyond the newest 200 move to `snapshots\old` (never erased). Stored in `<data>\snapshots`.
     GET  /api/snapshots         -> { items: [{ id, at, profile, auto, pinned, name|null, count,
                                                turnOn,   // mods in it that are off now (and still in the library)
                                                turnOff,  // mods that are on now but not in it

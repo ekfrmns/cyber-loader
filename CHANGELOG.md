@@ -2,6 +2,12 @@
 
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = changes that need your data migrated.
 
+## 1.2.1 - 2026-11-17
+Setup history is simpler.
+- Removed the "Keep current setup" and "Keep this one" buttons. Saving a named list of mods is what profiles are for; setup history stays automatic, with just Details and Restore.
+- Setup history now keeps the newest 200 setups instead of 100 (older ones are still moved aside, never erased).
+- The API for naming and keeping a setup is still there (`/api/snapshots/save` and `/pin`), the app just no longer shows it.
+
 ## 1.2.0 - 2026-11-17
 Setup history, and a picker for what a mod needs.
 - **Setup history** ("..." menu, "Setup history…"). A snapshot is saved after every successful Apply: which mods were on (in order), the profile, and for each mod its name, version, upload date and Nexus number as far as its library folder name says. It holds no mod files. Restore puts that mod list back on screen; nothing in the game changes until you review and apply, so every safety rule still applies.

@@ -205,6 +205,9 @@ class KeepTest(Base):
         with self.assertRaises(ApiError):
             self.app.pin_snapshot("20200101-000000-0000", True)
 
+    def test_the_cap_is_200(self):
+        self.assertEqual(snapmod.MAX_AUTO, 200)
+
     def test_old_automatic_ones_move_aside_never_vanish_and_pinned_stay(self):
         keep = snapmod.MAX_AUTO
         snapmod.MAX_AUTO = 2
