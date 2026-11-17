@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Never commit data, mods, or game files
+*.archive
+*.zip
+*.7z
+*.rar
+*.dll
+*.log
+*.msgpack
+library/
+state/
+logs/
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+
+# vendored, signed Microsoft WebView2 SDK (see launcher/vendor/webview2/VENDOR.md)
+!launcher/vendor/webview2/*.dll
+
+# local Claude preview config
+.claude/
+
+# build output of tools/package.py
+dist/
+# local dev config (points the engine at a game/data folder)
+/cyberloader.json

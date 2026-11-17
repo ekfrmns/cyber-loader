@@ -1,0 +1,15 @@
+CyberLoader includes these third-party components. Their own license texts are in this folder or next to the files.
+
+Python (the private runtime in the "runtime" folder)
+  Copyright (c) Python Software Foundation. Licensed under the Python Software Foundation License.
+  Full text: runtime\LICENSE.txt. Source and downloads: https://www.python.org/
+
+Microsoft Edge WebView2 SDK (Microsoft.Web.WebView2.Core.dll, Microsoft.Web.WebView2.WinForms.dll, WebView2Loader.dll)
+  Copyright (c) Microsoft Corporation. Redistributed under the Microsoft.Web.WebView2 license: see LICENSES\WebView2-LICENSE.txt.
+  The WebView2 Runtime itself ships with Windows 11 and Microsoft Edge; it is not included.
+
+7-Zip (optional component, tools\7z\7z.exe and 7z.dll)
+  Copyright (c) Igor Pavlov. Licensed under the GNU LGPL, with a restriction on the unRAR code
+  (it may not be used to re-create the RAR compression algorithm). Full text: tools\7z\License.txt.
+  Source code and website: https://www.7-zip.org/
+  A private copy is installed next to CyberLoader only if you choose that option in Setup; nothing is installed system-wide.

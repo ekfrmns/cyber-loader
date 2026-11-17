@@ -1,0 +1,197 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>CyberLoader</title>
+<link rel="icon" href="favicon.ico" type="image/x-icon">
+<script>
+  // Set the theme before first paint so there is no light/dark flash.
+  (function () {
+    var r = document.documentElement, s = {};
+    try { s = JSON.parse(localStorage.getItem('cmm.settings') || '{}') || {}; } catch (e) {}
+    var t = s.theme || 'system';
+    var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+    r.dataset.theme = dark ? 'dark' : 'light';
+    if (/^#[0-9a-f]{6}$/i.test(s.accent || '')) r.style.setProperty('--accent', s.accent);
+    // In the CyberLoader window: drop the Windows title bar before first paint (the page draws its own).
+    var h = window.cyberHost;
+    if (h) { try { h.frameless(true); h.setBackground(dark ? '#0d0d10' : '#f2f2f6'); } catch (e) {} }
+  })();
+</script>
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<div class="ambient" aria-hidden="true"></div>
+
+<div id="app" data-modal-inert>
+  <!-- Top bar = window title bar: transparent, draggable (data-window-drag, handled by the host). -->
+  <header class="topbar" id="topbar" data-window-drag>
+    <div class="topbar-inner">
+      <button class="btn btn-icon" id="newProfileBtn" type="button" aria-label="New profile" title="New profile"><span data-icon="plus" data-size="18"></span></button>
+      <button class="btn btn-profile" id="profileBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profileMenu">
+        <span class="profile-caption">Profile</span>
+        <span class="profile-name" id="profileName">&nbsp;</span>
+        <span data-icon="chevronDown" data-size="16" class="profile-chev"></span>
+      </button>
+
+      <div class="search">
+        <span data-icon="search" data-size="16" class="search-icon"></span>
+        <input id="search" type="search" placeholder="Search mods" aria-label="Search mods" autocomplete="off" spellcheck="false" aria-keyshortcuts="/">
+        <kbd class="search-kbd" aria-hidden="true">/</kbd>
+      </div>
+
+      <div class="chips">
+        <span class="chip chip-demo" id="demoChip" hidden title="The engine isn't connected, so this is sample data">Demo data</span>
+        <span class="chip" id="gameChip" role="status"><span class="chip-dot"></span><span class="chip-label">Checking…</span></span>
+      </div>
+
+      <button class="btn btn-icon" id="moreBtn" type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" aria-controls="moreMenu">
+        <span data-icon="more" data-size="20"></span>
+      </button>
+    </div>
+  </header>
+
+  <div class="scroller" id="scroller">
+  <main class="main" id="main">
+    <div class="page-head">
+      <h1 class="page-title">Library</h1>
+      <p class="page-sub" id="pageSub">&nbsp;</p>
+    </div>
+    <div id="banner" class="banner" role="status" hidden></div>
+    <div id="list" class="list"></div>
+  </main>
+  </div>
+</div>
+
+<!-- Floating pending-changes bar: only shown when there is something to apply -->
+<div id="bar" class="bar" role="region" aria-label="Pending changes" hidden data-modal-inert>
+  <div class="bar-view" data-view="pending">
+    <div class="bar-text">
+      <div class="bar-title" id="barSummary"></div>
+      <div class="bar-sub" id="barReason"></div>
+    </div>
+    <div class="bar-actions">
+      <button class="btn" id="previewBtn" type="button" aria-haspopup="dialog">Preview</button>
+      <button class="btn btn-primary" id="applyBtn" type="button" aria-describedby="barReason">Apply</button>
+    </div>
+  </div>
+  <div class="bar-view" data-view="applying" hidden>
+    <div class="bar-text">
+      <div class="bar-title" id="progText">Applying…</div>
+      <div class="bar-sub"><span id="progPct" class="tabular">0%</span></div>
+    </div>
+    <div class="progress" id="progBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="progText" tabindex="-1">
+      <div class="progress-fill" id="progFill"></div>
+    </div>
+  </div>
+  <div class="bar-view" data-view="done" hidden>
+    <span class="success" aria-hidden="true">
+      <span class="success-halo" id="halo"></span>
+      <span class="success-badge" id="badge"><span data-icon="check" data-size="18"></span></span>
+    </span>
+    <div class="bar-text">
+      <div class="bar-title">Applied</div>
+      <div class="bar-sub" id="doneText"></div>
+    </div>
+  </div>
+  <div class="bar-view" data-view="error" hidden>
+    <span class="bar-err-icon" data-icon="warning" data-size="20"></span>
+    <div class="bar-text">
+      <div class="bar-title">Couldn’t apply</div>
+      <div class="bar-sub" id="errText"></div>
+    </div>
+    <div class="bar-actions">
+      <button class="btn" id="errDismiss" type="button">Dismiss</button>
+      <button class="btn btn-primary" id="errRetry" type="button">Try again</button>
+    </div>
+  </div>
+</div>
+
+<!-- Window buttons: filled by app.js only inside the CyberLoader window. Outside #app so they stay usable above sheets. -->
+<div id="winctl" class="winctl" role="group" aria-label="Window" hidden></div>
+
+<div id="scrim" class="scrim" hidden></div>
+<!-- Keeps the window draggable by its top edge while a sheet covers the top bar. -->
+<div class="drag-strip" data-window-drag aria-hidden="true"></div>
+
+<!-- Preview sheet -->
+<section id="previewSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="pvTitle" hidden>
+  <header class="sheet-head">
+    <div>
+      <h2 class="sheet-title" id="pvTitle">Review changes</h2>
+      <p class="sheet-sub">Nothing in the game folder changes until you apply.</p>
+    </div>
+    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
+  </header>
+  <div class="sheet-body" id="pvBody"></div>
+  <footer class="sheet-foot">
+    <button class="btn btn-quiet" id="pvDiscard" type="button">Discard changes</button>
+    <span class="spacer"></span>
+    <span class="foot-reason" id="pvReason"></span>
+    <button class="btn btn-primary" id="pvApply" type="button" aria-describedby="pvReason">Apply</button>
+  </footer>
+</section>
+
+<!-- Appearance sheet -->
+<section id="settingsSheet" class="sheet sheet-sm" role="dialog" aria-modal="true" aria-labelledby="stTitle" hidden>
+  <header class="sheet-head">
+    <div>
+      <h2 class="sheet-title" id="stTitle">Appearance</h2>
+      <p class="sheet-sub">Saved for next time.</p>
+    </div>
+    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
+  </header>
+  <div class="sheet-body">
+    <fieldset class="field">
+      <legend class="field-label">Theme</legend>
+      <div class="segmented">
+        <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+        <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+        <label><input type="radio" name="theme" value="system"><span>System</span></label>
+      </div>
+    </fieldset>
+    <fieldset class="field">
+      <legend class="field-label">Accent colour</legend>
+      <div class="swatches" id="swatches"></div>
+    </fieldset>
+  </div>
+</section>
+
+<!-- Deleted mods (the in-app trash) -->
+<section id="trashSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="trTitle" hidden>
+  <header class="sheet-head">
+    <div>
+      <h2 class="sheet-title" id="trTitle">Deleted mods</h2>
+      <p class="sheet-sub" id="trSub">Kept here until you empty the trash.</p>
+    </div>
+    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
+  </header>
+  <div class="sheet-body" id="trBody"></div>
+  <footer class="sheet-foot">
+    <span class="spacer"></span>
+    <button class="btn btn-danger" id="trEmpty" type="button">Empty trash…</button>
+  </footer>
+</section>
+
+<!-- Generic confirm / prompt dialog, filled by ui.js -->
+<section id="dialog" class="sheet sheet-dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle" hidden></section>
+
+<div id="profileMenu" class="popover" role="menu" aria-label="Profiles" hidden></div>
+<div id="moreMenu" class="popover" role="menu" aria-label="More actions" hidden></div>
+<div id="rowMenu" class="popover" role="menu" aria-label="Mod actions" hidden></div>
+
+<div id="drop" class="drop" hidden aria-hidden="true">
+  <div class="drop-panel">
+    <span data-icon="import" data-size="32" class="drop-icon"></span>
+    <div class="drop-title">Drop to add to your library</div>
+    <div class="drop-sub">Mod archives (.zip, .7z, .rar) or mod folders. Nothing goes into the game until you switch it on and apply.</div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+<div id="sr" class="sr-only" aria-live="polite"></div>
+</body>
+</html>

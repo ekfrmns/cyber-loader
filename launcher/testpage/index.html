@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Host test page</title>
+<!-- Test fixture for CyberLoader.exe (window host). Not the real UI. Run: tools\test-host.ps1 -->
+<style>
+  :root { color-scheme: dark; --bg: #0c0e14; --fg: #e8eaf0; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px system-ui, sans-serif; overflow: hidden; }
+  html[data-maximized] body { outline: 2px solid #3a7; outline-offset: -2px; }
+  #bar { display: flex; align-items: center; height: 40px; padding-left: 16px; }
+  #bar .title { flex: 1; font-weight: 600; opacity: .9; }
+  html:not([data-focused]) #bar { opacity: .5; }
+  .wb { width: 46px; height: 40px; border: 0; background: transparent; color: inherit; font: inherit; }
+  .wb:hover { background: rgba(255,255,255,.1); }
+  .wb.close:hover { background: #e81123; }
+  main { padding: 24px 16px; }
+  pre { background: #151824; padding: 12px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="bar" data-window-drag><span class="title">Host test page (drag me)</span>
+  <button class="wb" id="min" aria-label="Minimize">&#8211;</button>
+  <button class="wb" id="max" aria-label="Maximize">&#9633;</button>
+  <button class="wb close" id="close" aria-label="Close">&#10005;</button>
+</div>
+<main><pre id="out">no host</pre></main>
+<script>
+  var out = document.getElementById('out'), h = window.cyberHost;
+  function log(t) { if (window.chrome && window.chrome.webview) window.chrome.webview.postMessage({ cmd: 'log', text: t }); }
+  if (h) {
+    h.frameless(true);
+    h.setBackground('#0c0e14');
+    h.onState(function (s) { out.textContent = 'state ' + JSON.stringify(s) + '\nhtml: ' + document.documentElement.className + ' | ' + Array.prototype.map.call(document.documentElement.attributes, function (a) { return a.name; }).join(','); log('state ' + JSON.stringify(s)); });
+    document.getElementById('min').onclick = function () { h.minimize(); };
+    document.getElementById('max').onclick = function () { h.toggleMaximize(); };
+    document.getElementById('close').onclick = function () { h.close(); };
+    if (location.search.indexOf('selftest') >= 0) {
+      setTimeout(function () { log('selftest: toggleMaximize'); h.toggleMaximize(); }, 1500);
+      setTimeout(function () { log('selftest: toggleMaximize back'); h.toggleMaximize(); }, 3500);
+      setTimeout(function () { log('selftest: handles=' + document.querySelectorAll('[data-host-resize]').length); }, 5000);
+    }
+    log('page ready, handles=' + document.querySelectorAll('[data-host-resize]').length);
+  } else { out.textContent = 'window.cyberHost is undefined (plain browser)'; }
+</script>
+</body>
+</html>
