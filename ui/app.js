@@ -51,11 +51,14 @@ function listNames(names) {
   if (names.length <= 2) return names.join(' and ');
   return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
 }
+// A need the engine guessed from the mod's files: { name: 'ArchiveXL', ids: [library mods that supply it] }.
+// It is met as soon as any supplier is on.
+const autoNeedsMe = (x, id) => (x.autoRequires || []).some((n) => n.ids.includes(id) && !n.ids.some((i) => byId(i)?.enabled));
 function warningFor(m) {
   const all = mods();
   if (!m.enabled) {
-    if (!m.framework && !all.some((x) => x.requires?.includes(m.id))) return '';
-    const deps = all.filter((x) => x.enabled && x.requires?.includes(m.id));
+    if (!m.framework && !all.some((x) => x.requires?.includes(m.id) || autoNeedsMe(x, m.id))) return '';
+    const deps = all.filter((x) => x.enabled && (x.requires?.includes(m.id) || autoNeedsMe(x, m.id)));
     return deps.length ? `Needed by ${listNames(deps.map((d) => d.name))}` : '';
   }
   const missing = (m.requires || []).map((r) => {
@@ -63,6 +66,10 @@ function warningFor(m) {
     if (!dep) return `${r} (not in library)`;
     return dep.enabled ? null : dep.name;
   }).filter(Boolean);
+  for (const n of m.autoRequires || []) {
+    if (n.ids.some((i) => byId(i)?.enabled)) continue;
+    missing.push(n.ids.length ? n.name : `${n.name} (not in library)`);
+  }
   return missing.length ? `Needs ${listNames(missing)}` : '';
 }
 

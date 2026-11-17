@@ -2,6 +2,14 @@
 
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = changes that need your data migrated.
 
+## 1.1.0 - 2026-11-17
+Mods now warn you when the core mod they depend on is off.
+- The app looks at the files inside each mod and guesses which core mod it needs: Redscript, ArchiveXL, TweakXL, RED4ext, Cyber Engine Tweaks, Input Loader or Audioware. Turn a mod on while its core mod is off and the row says "Needs ...". Turn a core mod off while something that is on needs it and that row says "Needed by ...". The Review changes window lists the same warnings.
+- It finds the core mod in your library by the files it ships, not by its name, and any matching one counts. If none is in your library the warning says "not in library".
+- It is a guess from file types only, so it only covers those seven. It never blocks Apply. A "needs" entry you set yourself still works and replaces the guess for the same core mod.
+- API: each mod has a new `autoRequires` list (see `docs/API.md`). Nothing was removed or changed.
+- The sample data inside the app has generic names only (this ships the earlier fix that 1.0.1 missed).
+
 ## 1.0.1 - 2026-11-17
 First public release on GitHub. Same app as 1.0.0, tidied for sharing.
 - Sample names in the built-in demo data and in the group-guessing keywords are generic now, with no one's personal mod or profile names.

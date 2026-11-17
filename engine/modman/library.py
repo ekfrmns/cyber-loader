@@ -48,6 +48,42 @@ def guess_group(name: str) -> str:
     return "Other"
 
 
+# ---------------------------------------------------------------- frameworks guessed from files
+# A mod that ships a file of a certain kind needs the framework that reads it (a `.reds` script needs Redscript, an
+# `.xl` file needs ArchiveXL, ...). A mod IS that framework when it ships the framework's own files. Paths are
+# lower-case with backslashes (see util.key). This is a guess from file types only: it never reads mod pages.
+def _under(p: str, prefix: str, *exts: str) -> bool:
+    return p.startswith(prefix) and (not exts or p.endswith(exts))
+
+
+NEEDS_RULES = {
+    "RED4ext": lambda p: _under(p, "red4ext\\plugins\\"),
+    "Redscript": lambda p: _under(p, "r6\\scripts\\", ".reds"),
+    "ArchiveXL": lambda p: _under(p, "archive\\", ".xl"),
+    "TweakXL": lambda p: _under(p, "r6\\tweaks\\", ".yaml", ".yml", ".tweak"),
+    "Cyber Engine Tweaks": lambda p: _under(p, "bin\\x64\\plugins\\cyber_engine_tweaks\\mods\\"),
+    "Input Loader": lambda p: _under(p, "r6\\input\\", ".xml"),
+    "Audioware": lambda p: _under(p, "r6\\audioware\\"),
+}
+PROVIDES_RULES = {
+    "RED4ext": lambda p: p == "red4ext\\red4ext.dll",
+    "Redscript": lambda p: _under(p, "red4ext\\plugins\\redscript\\") or p == "engine\\tools\\scc.exe",
+    "ArchiveXL": lambda p: _under(p, "red4ext\\plugins\\archivexl\\"),
+    "TweakXL": lambda p: _under(p, "red4ext\\plugins\\tweakxl\\"),
+    "Cyber Engine Tweaks": lambda p: p == "bin\\x64\\plugins\\cyber_engine_tweaks.asi",
+    "Input Loader": lambda p: _under(p, "red4ext\\plugins\\input_loader\\") or _under(p, "red4ext\\plugins\\inputloader\\"),
+    "Audioware": lambda p: _under(p, "red4ext\\plugins\\audioware\\"),
+}
+
+
+def detect_frameworks(file_keys) -> tuple:
+    """(needs, provides): framework names a mod needs and framework names it supplies, from its file paths."""
+    keys = list(file_keys)
+    provides = sorted(n for n, rule in PROVIDES_RULES.items() if any(rule(k) for k in keys))
+    needs = sorted(n for n, rule in NEEDS_RULES.items() if n not in provides and any(rule(k) for k in keys))
+    return needs, provides
+
+
 # ---------------------------------------------------------------- model
 @dataclass
 class Mod:
@@ -59,6 +95,8 @@ class Mod:
     path: Path
     files: dict = field(default_factory=dict)  # key -> relative path (original case)
     size: int = 0
+    needs_fw: list = field(default_factory=list)      # framework names guessed from its files (see detect_frameworks)
+    provides_fw: list = field(default_factory=list)   # framework names it supplies
 
     def src(self, rel: str) -> Path:
         return self.path / rel
@@ -93,7 +131,27 @@ class Library:
                     size += p.stat().st_size
                 except OSError:
                     pass
-        return Mod(d.name, name, group, framework, list(meta.get("requires", [])), d, files, size)
+        needs_fw, provides_fw = detect_frameworks(files)
+        return Mod(d.name, name, group, framework, list(meta.get("requires", [])), d, files, size, needs_fw, provides_fw)
+
+    def providers(self) -> dict:
+        """framework name -> ids of library mods that supply it."""
+        out: dict = {}
+        for m in self.mods.values():
+            for fw in m.provides_fw:
+                out.setdefault(fw, []).append(m.id)
+        return out
+
+    def auto_requires(self, m: Mod, providers: dict = None) -> list:
+        """What the file guess says `m` needs: [{name, ids}] where ids are library mods that supply it (empty = none in
+        the library). Left out when the mod's own `requires` already names a supplier."""
+        providers = self.providers() if providers is None else providers
+        out = []
+        for fw in m.needs_fw:
+            ids = [i for i in providers.get(fw, []) if i != m.id]
+            if not any(i in m.requires for i in ids):
+                out.append({"name": fw, "ids": ids})
+        return out
 
     def get(self, mod_id: str) -> Mod:
         return self.mods[mod_id]

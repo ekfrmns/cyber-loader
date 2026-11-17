@@ -60,8 +60,9 @@ class App:
             _, conflicts = build_desired(self.library, self.working)
             cc = conflict_counts(conflicts)
             mods, on, off = [], 0, 0
+            providers = self.library.providers()
             for m in self.library.mods.values():
-                v = self._mod_view(m, enabled, deployed, cc)
+                v = self._mod_view(m, enabled, deployed, cc, self.library.auto_requires(m, providers))
                 if v["pending"] == "on":
                     on += 1
                 elif v["pending"] == "off":
@@ -73,14 +74,14 @@ class App:
                     "version": __version__, "mods": mods}
 
     @staticmethod
-    def _mod_view(m, enabled: set, deployed: set, cc: dict) -> dict:
+    def _mod_view(m, enabled: set, deployed: set, cc: dict, auto=None) -> dict:
         pending = None
         if m.id in enabled and m.id not in deployed:
             pending = "on"
         elif m.id not in enabled and m.id in deployed:
             pending = "off"
         return {"id": m.id, "name": m.name, "group": m.group, "files": len(m.files), "enabled": m.id in enabled,
-                "pending": pending, "framework": m.framework, "requires": m.requires, "conflicts": cc.get(m.id, 0)}
+                "pending": pending, "framework": m.framework, "requires": m.requires, "autoRequires": auto or [], "conflicts": cc.get(m.id, 0)}
 
     def _profile_dirty(self) -> bool:
         """True if the staged mod set differs from the saved profile."""
@@ -98,16 +99,26 @@ class App:
             self.working = keep
             return self.state_view()
 
-    def _warnings(self) -> list:
-        w = []
+    def _warning_items(self) -> list:
+        """[(mod id, ids of the mods that would fix it, text)] for every unmet need of an enabled mod."""
+        items = []
         enabled = set(self.working)
+        providers = self.library.providers()
         for mid in self.working:
             m = self.library.mods[mid]
             for r in m.requires:
                 if r not in enabled:
                     rn = self.library.mods[r].name if r in self.library.mods else r
-                    w.append(f"{m.name} needs {rn}, which is off")
-        return w
+                    items.append((mid, [r], f"{m.name} needs {rn}, which is off"))
+            for need in self.library.auto_requires(m, providers):   # guessed from the mod's files
+                if any(i in enabled for i in need["ids"]):
+                    continue
+                why = "which is off" if need["ids"] else "which is not in your library"
+                items.append((mid, need["ids"], f"{m.name} needs {need['name']}, {why}"))
+        return items
+
+    def _warnings(self) -> list:
+        return [text for _, _, text in self._warning_items()]
 
     # ------------------------------------------------------------ toggling and profiles
     def toggle(self, mod_id: str, enabled: bool) -> dict:
@@ -118,11 +129,11 @@ class App:
                 self.working.append(mod_id)
             elif not enabled and mod_id in self.working:
                 self.working.remove(mod_id)
-            warns = [x for x in self._warnings() if self.library.mods[mod_id].name in x]
-            if not enabled:  # also warn if something still enabled needs this mod
-                warns += [x for x in self._warnings() if x.endswith(f"needs {self.library.mods[mod_id].name}, which is off")]
+            # warnings about this mod's own needs, and (when turned off) about enabled mods that need this one
+            warns = [text for mid, fixers, text in self._warning_items() if mid == mod_id or (not enabled and mod_id in fixers)]
             _, conflicts = build_desired(self.library, self.working)
-            view = self._mod_view(self.library.mods[mod_id], set(self.working), self.state.deployed_mods(), conflict_counts(conflicts))
+            view = self._mod_view(self.library.mods[mod_id], set(self.working), self.state.deployed_mods(), conflict_counts(conflicts),
+                                  self.library.auto_requires(self.library.mods[mod_id]))
             return {"ok": True, "mod": view, "warnings": sorted(set(warns))}
 
     def select_profile(self, name: str) -> dict:

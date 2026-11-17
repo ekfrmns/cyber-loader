@@ -14,7 +14,10 @@ If the contract needs to change, the UI session writes the request to `docs/API-
       enabled: boolean,           // enabled in the selected profile (including staged changes)
       pending: "on"|"off"|null,   // differs from what is deployed in the game right now
       framework: boolean,         // core dependency (RED4ext, Codeware, ArchiveXL, ...)
-      requires: string[],         // ids of mods this one needs
+      requires: string[],         // ids of mods this one needs (set by hand, `--requires` on import)
+      autoRequires: { name: string, ids: string[] }[],  // frameworks the engine guessed from the mod's files (a .reds script
+                                  // needs Redscript, an .xl file ArchiveXL, ...). ids = library mods that supply it, empty if
+                                  // none is in the library. Met as soon as any of the ids is on. Also feeds `warnings`.
       conflicts: number           // files this mod loses/wins against other enabled mods
     }
 

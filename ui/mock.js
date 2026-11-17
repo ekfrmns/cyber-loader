@@ -158,6 +158,14 @@ let mods = q.has('empty') ? [] : Object.entries(SETS).flatMap(([group, rows]) =>
   rows.map(([id, name, files, requires]) => ({ id, name, group, files, framework: group === 'Framework', requires })));
 const byId = new Map(mods.map((m) => [m.id, m]));
 
+// What the real engine guesses from a mod's files (docs/API.md `autoRequires`): { name, ids: suppliers in the library }.
+const AUTO = {
+  netrunnersuit: [{ name: 'ArchiveXL', ids: ['archivexl'] }],
+  gloves: [{ name: 'ArchiveXL', ids: ['archivexl'] }, { name: 'TweakXL', ids: ['tweakxl'] }],
+};
+for (const m of mods) m.autoRequires = AUTO[m.id] || [];
+function autoMissing(m) { return m.autoRequires.filter((n) => !n.ids.some((i) => enabled.has(i))); }
+
 // Files shared between mods. The last mod listed wins. 7 mods in total are involved.
 const CONFLICTS = [
   { ids: ['naturalskin', 'smoothskin'], paths: ['archive/pc/mod/skin_body_d01.archive', 'archive/pc/mod/skin_body_n01.archive', 'archive/pc/mod/skin_face_d01.archive', 'archive/pc/mod/skin_face_n01.archive', 'archive/pc/mod/skin_detail_mask.archive', 'archive/pc/mod/skin_roughness.archive'] },
@@ -217,7 +225,7 @@ function conflictsOf(id) {
 
 function view(m) {
   const on = enabled.has(m.id);
-  return { id: m.id, name: m.name, group: m.group, files: m.files, enabled: on, pending: on === deployed.has(m.id) ? null : on ? 'on' : 'off', framework: m.framework, requires: [...m.requires], conflicts: conflictsOf(m.id) };
+  return { id: m.id, name: m.name, group: m.group, files: m.files, enabled: on, pending: on === deployed.has(m.id) ? null : on ? 'on' : 'off', framework: m.framework, requires: [...m.requires], autoRequires: m.autoRequires.map((n) => ({ name: n.name, ids: [...n.ids] })), conflicts: conflictsOf(m.id) };
 }
 
 function state() {
@@ -239,6 +247,7 @@ function warnings() {
     if (!enabled.has(m.id)) continue;
     const off = m.requires.filter((r) => !enabled.has(r));
     for (const r of off) w.push(`${nameOf(r)} is off but ${m.name} needs it`);
+    for (const n of autoMissing(m)) w.push(`${m.name} needs ${n.name}, which is off`);
   }
   return w;
 }
@@ -287,8 +296,11 @@ export async function handle(method, url, body = {}) {
       if (job && !job.final) return err(423, 'Wait for the current apply to finish.');
       if (body.enabled) enabled.add(m.id); else enabled.delete(m.id);
       const w = [];
-      if (!body.enabled) for (const d of mods) if (enabled.has(d.id) && d.requires.includes(m.id)) w.push(`${m.name} is off but ${d.name} needs it`);
-      if (body.enabled) for (const r of m.requires) if (!enabled.has(r)) w.push(`${m.name} needs ${nameOf(r)}, which is off`);
+      if (!body.enabled) for (const d of mods) if (enabled.has(d.id) && (d.requires.includes(m.id) || autoMissing(d).some((n) => n.ids.includes(m.id)))) w.push(`${m.name} is off but ${d.name} needs it`);
+      if (body.enabled) {
+        for (const r of m.requires) if (!enabled.has(r)) w.push(`${m.name} needs ${nameOf(r)}, which is off`);
+        for (const n of autoMissing(m)) w.push(`${m.name} needs ${n.name}, which is off`);
+      }
       return ok({ ok: true, mod: view(m), warnings: w });
     }
 

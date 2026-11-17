@@ -69,7 +69,8 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(m["Fancy"]["requires"], ["Core"])
         self.assertEqual(m["Fancy"]["group"], "Content")
         self.assertEqual(set(m["Core"]), {"id", "name", "group", "files", "enabled", "pending", "framework",
-                                          "requires", "conflicts"})
+                                          "requires", "autoRequires", "conflicts"})
+        self.assertEqual(m["Fancy"]["autoRequires"], [])
 
     def test_toggle_preview_apply_cycle(self):
         code, r = self.call("POST", "/api/toggle", {"id": "Fancy", "enabled": True})
