@@ -18,13 +18,20 @@ If the contract needs to change, the UI session writes the request to `docs/API-
       autoRequires: { name: string, ids: string[] }[],  // frameworks the engine guessed from the mod's files (a .reds script
                                   // needs Redscript, an .xl file ArchiveXL, ...). ids = library mods that supply it, empty if
                                   // none is in the library. Met as soon as any of the ids is on. Also feeds `warnings`.
-      conflicts: number           // files this mod loses/wins against other enabled mods
+      conflicts: number,          // files this mod loses/wins against other enabled mods
+      nexusId: number|null,       // Nexus mod number, read from the library folder name (null if it did not come from Nexus)
+      version: string|null,       // its version as people write it ("2.0.1"; the older Nexus style "2-0-1" is shown with dots), if the folder name has one
+      uploaded: string|null,      // upload date "YYYY-MM-DD", if the folder name has one
+      otherVersions: string[]     // ids of other library mods that look like another version of this one: same Nexus number and the
+                                  // same name apart from version words. Turning two of them on gives a warning in `warnings`.
     }
 
 ## Endpoints
 
     GET  /api/state
-      -> { game: { running: boolean },
+      -> { game: { running: boolean, found: boolean,
+                   version?: string,           // the game's own version ("2.5"), read from its exe; missing if unreadable
+                   updated?: string },         // date of the game exe ("YYYY-MM-DD"), i.e. its last update
            profile: string,
            profiles: string[],
            deployedCount: number,          // files currently placed in the game folder
@@ -58,6 +65,8 @@ If the contract needs to change, the UI session writes the request to `docs/API-
 
     POST /api/import            { path }                 -> { ok, id, warnings: string[] }
          Path of a folder or archive on this computer (CLI / scripts). Unpacks into its own library folder; never runs anything.
+         The library folder keeps the file's own name (since 1.4.0), so a Nexus download's number, version and date stay in it;
+         a name clash adds " (2)" at the end.
 
     Import by upload (drag and drop: a web page cannot read the path of a dropped file)
     POST /api/import/begin      { name, kind: "archive"|"folder" }  -> { token }

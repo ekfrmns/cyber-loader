@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .snapshots import parse_origin, pretty_version
 from .util import CREATE_NO_WINDOW, find_7z, key, norm_rel, read_json, write_json
 
 META = ".mod.json"
@@ -34,10 +35,31 @@ _GROUP_RULES = [
 ]
 
 
+_RE_COPY = re.compile(r" \((?:\d+|restored(?: \d+)?)\)$")
+
+
 def clean_name(folder: str) -> str:
-    s = _RE_NEXUS.sub("", folder)
+    copy = _RE_COPY.search(folder)
+    base = folder[:copy.start()] if copy else folder
+    s = _RE_NEXUS.sub("", base)
     s = _RE_NEXUS_OLD.sub("", s)
-    return s.strip(" -") or folder
+    s = s.strip(" -") or base
+    return s + (copy.group(0) if copy else "")
+
+
+_RE_VERSIONISH = re.compile(r"\bv?\d+(?:[.\-_]\d+)*[a-z]?\b|\bversion\b|\bv\d+\b", re.I)
+
+
+def variant_key(mod_id: str, name: str):
+    """Which "same mod, different version" family a library mod belongs to: (Nexus number, its name without version words).
+    Two different files of one Nexus page (a body and a head, four tattoo colours) have different names, so they differ."""
+    nid = parse_origin(mod_id).get("nexusId")
+    if not nid:
+        return None
+    base = _RE_COPY.sub("", name).lower()
+    base = _RE_VERSIONISH.sub(" ", base)
+    base = re.sub(r"[^a-z]+", " ", base).strip()
+    return (nid, base) if base else None
 
 
 def guess_group(name: str) -> str:
@@ -96,6 +118,9 @@ class Mod:
     path: Path
     files: dict = field(default_factory=dict)  # key -> relative path (original case)
     size: int = 0
+    nexus_id: int = None                              # from the library folder name, when it came from a Nexus download
+    version: str = None                               # version as people write it ("2.0.1"), when the folder name has one
+    uploaded: str = None                              # upload date "YYYY-MM-DD", when the folder name has one
     needs_fw: list = field(default_factory=list)      # framework names guessed from its files (see detect_frameworks)
     provides_fw: list = field(default_factory=list)   # framework names it supplies
 
@@ -133,7 +158,23 @@ class Library:
                 except OSError:
                     pass
         needs_fw, provides_fw = detect_frameworks(files)
-        return Mod(d.name, name, group, framework, list(meta.get("requires", [])), d, files, size, needs_fw, provides_fw)
+        origin = parse_origin(d.name)
+        return Mod(d.name, name, group, framework, list(meta.get("requires", [])), d, files, size,
+                   origin.get("nexusId"), pretty_version(origin), origin.get("date"), needs_fw, provides_fw)
+
+    def other_versions(self) -> dict:
+        """mod id -> ids of the other library mods that look like another version of it (same Nexus number and name)."""
+        fam: dict = {}
+        for m in self.mods.values():
+            k = variant_key(m.id, m.name)
+            if k:
+                fam.setdefault(k, []).append(m.id)
+        out = {}
+        for ids in fam.values():
+            if len(ids) > 1:
+                for i in ids:
+                    out[i] = [x for x in ids if x != i]
+        return out
 
     def providers(self) -> dict:
         """framework name -> ids of library mods that supply it."""

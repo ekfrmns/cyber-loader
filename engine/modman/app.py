@@ -11,7 +11,7 @@ from .deploy import (Entry, Plan, State, _identical, _stat, apply_plan, build_de
                      intact, make_plan, preflight)
 from .library import GROUPS, Library, clean_name, normalize_root
 from .profiles import Profiles
-from .snapshots import Snapshots, describe, parse_origin
+from .snapshots import Snapshots, describe, parse_origin, pretty_version
 from .util import key, read_json, write_json
 
 
@@ -63,27 +63,29 @@ class App:
             cc = conflict_counts(conflicts)
             mods, on, off = [], 0, 0
             providers = self.library.providers()
+            others = self.library.other_versions()
             for m in self.library.mods.values():
-                v = self._mod_view(m, enabled, deployed, cc, self.library.auto_requires(m, providers))
+                v = self._mod_view(m, enabled, deployed, cc, self.library.auto_requires(m, providers), others.get(m.id))
                 if v["pending"] == "on":
                     on += 1
                 elif v["pending"] == "off":
                     off += 1
                 mods.append(v)
-            return {"game": {"running": game_running(), "found": self.cfg.game_found}, "profile": self.current,
+            return {"game": {"running": game_running(), "found": self.cfg.game_found, **self.cfg.game_info()}, "profile": self.current,
                     "profiles": self.profiles.names(), "deployedCount": len(self.state.files),
                     "pendingCount": {"on": on, "off": off}, "profileDirty": self._profile_dirty(),
                     "version": __version__, "mods": mods}
 
     @staticmethod
-    def _mod_view(m, enabled: set, deployed: set, cc: dict, auto=None) -> dict:
+    def _mod_view(m, enabled: set, deployed: set, cc: dict, auto=None, others=None) -> dict:
         pending = None
         if m.id in enabled and m.id not in deployed:
             pending = "on"
         elif m.id not in enabled and m.id in deployed:
             pending = "off"
         return {"id": m.id, "name": m.name, "group": m.group, "files": len(m.files), "enabled": m.id in enabled,
-                "pending": pending, "framework": m.framework, "requires": m.requires, "autoRequires": auto or [], "conflicts": cc.get(m.id, 0)}
+                "pending": pending, "framework": m.framework, "requires": m.requires, "autoRequires": auto or [], "conflicts": cc.get(m.id, 0),
+                "nexusId": m.nexus_id, "version": m.version, "uploaded": m.uploaded, "otherVersions": others or []}
 
     def _profile_dirty(self) -> bool:
         """True if the staged mod set differs from the saved profile."""
@@ -106,12 +108,17 @@ class App:
         items = []
         enabled = set(self.working)
         providers = self.library.providers()
+        others = self.library.other_versions()
         for mid in self.working:
             m = self.library.mods[mid]
             for r in m.requires:
                 if r not in enabled:
                     rn = self.library.mods[r].name if r in self.library.mods else r
                     items.append((mid, [r], f"{m.name} needs {rn}, which is off"))
+            for oid in others.get(mid, []):                          # another version of this same mod is on too
+                if oid in enabled:
+                    a, b = sorted((m.name, self.library.mods[oid].name))   # same wording from both sides, so it is listed once
+                    items.append((mid, [oid], f"“{a}” and “{b}” look like two versions of the same mod. Turn one of them off"))
             for need in self.library.auto_requires(m, providers):   # guessed from the mod's files
                 if any(i in enabled for i in need["ids"]):
                     continue
@@ -120,7 +127,7 @@ class App:
         return items
 
     def _warnings(self) -> list:
-        return [text for _, _, text in self._warning_items()]
+        return list(dict.fromkeys(text for _, _, text in self._warning_items()))   # each text once (a pair is listed from both sides)
 
     # ------------------------------------------------------------ toggling and profiles
     def toggle(self, mod_id: str, enabled: bool) -> dict:
@@ -135,7 +142,7 @@ class App:
             warns = [text for mid, fixers, text in self._warning_items() if mid == mod_id or (not enabled and mod_id in fixers)]
             _, conflicts = build_desired(self.library, self.working)
             view = self._mod_view(self.library.mods[mod_id], set(self.working), self.state.deployed_mods(), conflict_counts(conflicts),
-                                  self.library.auto_requires(self.library.mods[mod_id]))
+                                  self.library.auto_requires(self.library.mods[mod_id]), self.library.other_versions().get(mod_id))
             return {"ok": True, "mod": view, "warnings": sorted(set(warns))}
 
     def set_requires(self, mod_id: str, requires) -> dict:
@@ -158,7 +165,7 @@ class App:
             m.requires = clean
             _, conflicts = build_desired(self.library, self.working)
             view = self._mod_view(m, set(self.working), self.state.deployed_mods(), conflict_counts(conflicts),
-                                  self.library.auto_requires(m))
+                                  self.library.auto_requires(m), self.library.other_versions().get(m.id))
             return {"ok": True, "mod": view, "warnings": sorted({t for mid, _, t in self._warning_items() if mid == mod_id})}
 
     def set_group(self, mod_id: str, group: str) -> dict:
@@ -172,7 +179,8 @@ class App:
             self.library.write_meta(mod_id, group=group, framework=(group == "Framework"))
             m.group, m.framework = group, group == "Framework"
             _, conflicts = build_desired(self.library, self.working)
-            view = self._mod_view(m, set(self.working), self.state.deployed_mods(), conflict_counts(conflicts), self.library.auto_requires(m))
+            view = self._mod_view(m, set(self.working), self.state.deployed_mods(), conflict_counts(conflicts), self.library.auto_requires(m),
+                                  self.library.other_versions().get(m.id))
             return {"ok": True, "mod": view}
 
     def select_profile(self, name: str) -> dict:
@@ -371,6 +379,7 @@ class App:
             mods = []
             for m in s["mods"]:
                 row = {k: m.get(k) for k in ("id", "name", "version", "date", "nexusId")}
+                row["version"] = pretty_version(parse_origin(m["id"])) or row["version"]   # "2-0-1" is shown as "2.0.1"
                 row["on"] = m["id"] in now
                 if m["id"] not in self.library.mods:
                     row["status"] = "missing"
@@ -378,8 +387,7 @@ class App:
                     # the same Nexus mod under another folder = the updated version
                     repl = [x for x in by_nexus.get(m.get("nexusId"), []) if x.id != m["id"]]
                     if repl:
-                        o = parse_origin(repl[0].id)
-                        row["replacedBy"] = {"id": repl[0].id, "name": repl[0].name, "version": o.get("version"), "date": o.get("date")}
+                        row["replacedBy"] = {"id": repl[0].id, "name": repl[0].name, "version": repl[0].version, "date": repl[0].uploaded}
                 else:
                     row["status"] = "changed" if self._changed_since(m) else "same"
                 mods.append(row)
@@ -424,7 +432,7 @@ class App:
         p = Path(path)
         if not p.exists():
             raise ApiError(404, f"not found: {path}")
-        base = name or clean_name(p.stem if p.is_file() else p.name)
+        base = name or (p.stem if p.is_file() else p.name)   # keep the original name: the Nexus number, version and date stay readable
         mid, n = base, 2
         while (self.library.root / mid).exists():
             mid, n = f"{base} ({n})", n + 1
@@ -574,10 +582,10 @@ class App:
                 raise ApiError(400, "nothing was uploaded")
             if up["kind"] == "archive":
                 sources = [files[0]]
-                base = clean_name(Path(up["name"]).stem)
+                base = Path(up["name"]).stem
             else:
                 sources = [up["dir"]]
-                base = clean_name(up["name"])
+                base = up["name"]
             mid, n = base, 2
             while (self.library.root / mid).exists():
                 mid, n = f"{base} ({n})", n + 1

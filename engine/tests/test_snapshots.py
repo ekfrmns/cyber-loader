@@ -33,13 +33,13 @@ def write(p: Path, text="x"):
 class ParseTest(unittest.TestCase):
     def test_clear_style(self):
         self.assertEqual(parse_origin("Input Loader v0.2.6 for 2.50 4575 0.2.6 2026-10-26T08-38Z Q6xF6llYP"),
-                         {"nexusId": 4575, "version": "0.2.6", "date": "2026-10-26"})
+                         {"nexusId": 4575, "version": "0.2.6", "date": "2026-10-26", "style": "clear"})
 
     def test_v_prefix_is_dropped(self):
         self.assertEqual(parse_origin("Thing 1234 v1.2 2026-01-01T00-00Z abc")["version"], "1.2")
 
     def test_older_style_keeps_the_version_as_written_and_dates_the_upload(self):
-        self.assertEqual(parse_origin(B), {"nexusId": 2222, "version": "2-0-1", "date": "2023-10-31"})
+        self.assertEqual(parse_origin(B), {"nexusId": 2222, "version": "2-0-1", "date": "2023-10-31", "style": "squashed"})
 
     def test_plain_folder_has_nothing(self):
         self.assertEqual(parse_origin(C), {})

@@ -15,8 +15,8 @@ MAX_AUTO = 200   # older automatic snapshots beyond this are moved to `old\` (ne
 # Library folders made from a Nexus download carry the mod number, version and upload date:
 #   "<name> 4575 0.2.6 2026-10-26T08-38Z Q6xF6llYP"   (clear version)
 #   "<name>-4575-0-2-6-1698765432"                     (older style: the version has its dots turned into dashes)
-_NEW = re.compile(r"\s+(\d{3,6})\s+([\dv][\w.\-]*)\s+(\d{4}-\d\d-\d\d)T[\w-]+Z\s+\w+$")
-_OLD = re.compile(r"-(\d{3,6})-([\w-]*)-(\d{9,})$")
+_NEW = re.compile(r"\s+(\d{3,6})\s+([\dv][\w.\-]*)\s+(\d{4}-\d\d-\d\d)T[\w-]+Z\s+\w+(?: \((?:\d+|restored(?: \d+)?)\))?$")
+_OLD = re.compile(r"-(\d{3,6})-([\w-]*)-(\d{9,})(?: \((?:\d+|restored(?: \d+)?)\))?$")
 
 
 def parse_origin(folder: str) -> dict:
@@ -24,7 +24,7 @@ def parse_origin(folder: str) -> dict:
     The version is shown as written (the older style cannot be turned back into dots reliably)."""
     m = _NEW.search(folder)
     if m:
-        return {"nexusId": int(m.group(1)), "version": m.group(2).lstrip("v") or None, "date": m.group(3)}
+        return {"nexusId": int(m.group(1)), "version": m.group(2).lstrip("v") or None, "date": m.group(3), "style": "clear"}
     m = _OLD.search(folder)
     if m:
         date = None
@@ -32,13 +32,22 @@ def parse_origin(folder: str) -> dict:
             date = datetime.fromtimestamp(int(m.group(3)), timezone.utc).strftime("%Y-%m-%d")
         except (OverflowError, OSError, ValueError):
             pass
-        return {"nexusId": int(m.group(1)), "version": m.group(2) or None, "date": date}
+        return {"nexusId": int(m.group(1)), "version": m.group(2) or None, "date": date, "style": "squashed"}
     return {}
+
+
+def pretty_version(origin: dict):
+    """A version for people to read: the older Nexus style writes "2-0-1" for 2.0.1, so its dashes become dots."""
+    v = origin.get("version")
+    if v and origin.get("style") == "squashed":
+        v = v.replace("-", ".")
+    return v
 
 
 def describe(mod) -> dict:
     """One library mod as a snapshot remembers it."""
-    return {"id": mod.id, "name": mod.name, "files": len(mod.files), "size": mod.size, **parse_origin(mod.id)}
+    origin = {k: v for k, v in parse_origin(mod.id).items() if k != "style"}
+    return {"id": mod.id, "name": mod.name, "files": len(mod.files), "size": mod.size, **origin}
 
 
 class Snapshots:

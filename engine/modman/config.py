@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 
 from .util import read_json, write_json
@@ -33,6 +34,31 @@ def _find_ui() -> Path:
     return here / "ui"
 
 
+def _exe_product_version(path: Path):
+    """The ProductVersion text of a Windows exe (Cyberpunk's is the game version, like "2.5"), or None."""
+    if os.name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+        ver = ctypes.WinDLL("version", use_last_error=True)
+        size = ver.GetFileVersionInfoSizeW(str(path), None)
+        if not size:
+            return None
+        buf = ctypes.create_string_buffer(size)
+        if not ver.GetFileVersionInfoW(str(path), 0, size, buf):
+            return None
+        p, n = ctypes.c_void_p(), wintypes.UINT()
+        if not ver.VerQueryValueW(buf, "\\VarFileInfo\\Translation", ctypes.byref(p), ctypes.byref(n)) or n.value < 4:
+            return None
+        lang, cp = ctypes.cast(p, ctypes.POINTER(ctypes.c_ushort * 2)).contents
+        if not ver.VerQueryValueW(buf, f"\\StringFileInfo\\{lang:04x}{cp:04x}\\ProductVersion", ctypes.byref(p), ctypes.byref(n)) or not n.value:
+            return None
+        return ctypes.wstring_at(p.value, n.value - 1).strip() or None
+    except Exception:
+        return None
+
+
 class Config:
     """Paths and settings. `data` holds library/, profiles/, state/, logs/ and settings.json.
     Where things come from, first match wins: constructor arguments, MODMAN_GAME / MODMAN_DATA, the install's
@@ -62,6 +88,19 @@ class Config:
     def game_found(self) -> bool:
         """True if the configured folder really is a Cyberpunk 2077 install."""
         return (self.game / GAME_EXE_REL).is_file()
+
+    def game_info(self) -> dict:
+        """{version, updated} of the installed game, read from its exe (best effort; {} if it cannot be read)."""
+        exe = self.game / GAME_EXE_REL
+        out = {}
+        try:
+            out["updated"] = time.strftime("%Y-%m-%d", time.localtime(exe.stat().st_mtime))
+        except OSError:
+            return {}
+        v = _exe_product_version(exe)
+        if v:
+            out["version"] = v
+        return out
 
     def ensure(self) -> None:
         for d in (self.library, self.profiles_dir, self.state_dir, self.logs_dir, self.snapshots_dir, self.tmp_dir):

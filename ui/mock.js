@@ -156,6 +156,21 @@ function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^
 const SETS = { Framework: FRAMEWORK, Body: BODY, Characters: CHARACTERS, Clothing: CLOTHING, Gameplay: GAMEPLAY, Content: CONTENT, Other: OTHER };
 let mods = q.has('empty') ? [] : Object.entries(SETS).flatMap(([group, rows]) =>
   rows.map(([id, name, files, requires]) => ({ id, name, group, files, framework: group === 'Framework', requires })));
+// Sample versions and upload dates (the real engine reads them from a Nexus download's folder name), and one pair that
+// looks like two versions of the same mod: turning both on shows the "Another version is on too" warning.
+const VERSIONS = {
+  red4ext: ['1.31.1', '2026-10-02'], archivexl: ['1.28.8', '2026-10-20'], tweakxl: ['1.12.2', '2026-09-14'], redscript: ['0.5.27', '2026-08-01'],
+  codeware: ['1.19.0', '2026-10-11'], inputloader: ['0.2.7', '2026-11-02'], hdjackets: ['2.1', '2024-03-18'], nointro: ['1.0', '2022-02-15'],
+};
+if (mods.length) mods.push({ id: 'inputloader-old', name: 'Key Binding Loader', group: 'Framework', files: 3, framework: true, requires: ['red4ext'] });
+VERSIONS['inputloader-old'] = ['0.2.6', '2026-10-26'];
+for (const m of mods) {
+  const v = VERSIONS[m.id];
+  m.version = v ? v[0] : null;
+  m.uploaded = v ? v[1] : null;
+  m.nexusId = v ? 4000 + (m.id.length * 37) : null;
+  m.otherVersions = m.id === 'inputloader' ? ['inputloader-old'] : m.id === 'inputloader-old' ? ['inputloader'] : [];
+}
 const byId = new Map(mods.map((m) => [m.id, m]));
 
 // What the real engine guesses from a mod's files (docs/API.md `autoRequires`): { name, ids: suppliers in the library }.
@@ -249,13 +264,13 @@ function snapDetail(s) {
 
 function view(m) {
   const on = enabled.has(m.id);
-  return { id: m.id, name: m.name, group: m.group, files: m.files, enabled: on, pending: on === deployed.has(m.id) ? null : on ? 'on' : 'off', framework: m.framework, requires: [...m.requires], autoRequires: m.autoRequires.map((n) => ({ name: n.name, ids: [...n.ids] })), conflicts: conflictsOf(m.id) };
+  return { id: m.id, name: m.name, group: m.group, files: m.files, enabled: on, pending: on === deployed.has(m.id) ? null : on ? 'on' : 'off', framework: m.framework, requires: [...m.requires], autoRequires: m.autoRequires.map((n) => ({ name: n.name, ids: [...n.ids] })), conflicts: conflictsOf(m.id), nexusId: m.nexusId ?? null, version: m.version ?? null, uploaded: m.uploaded ?? null, otherVersions: [...(m.otherVersions || [])] };
 }
 
 function state() {
   const v = mods.map(view);
   return {
-    game: { running },
+    game: { running, found: true, version: '2.5', updated: '2026-10-21' },
     profile: current,
     profiles: [...profiles.keys()],
     profileDirty: current ? !sameSet(enabled, profiles.get(current)) : false,
@@ -272,6 +287,7 @@ function warnings() {
     const off = m.requires.filter((r) => !enabled.has(r));
     for (const r of off) w.push(`${nameOf(r)} is off but ${m.name} needs it`);
     for (const n of autoMissing(m)) w.push(`${m.name} needs ${n.name}, which is off`);
+    for (const o of m.otherVersions || []) if (enabled.has(o) && m.id < o) w.push(`“${m.name}” and “${nameOf(o)}” look like two versions of the same mod. Turn one of them off`);
   }
   return w;
 }

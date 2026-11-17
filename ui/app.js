@@ -54,7 +54,21 @@ function listNames(names) {
 // A need the engine guessed from the mod's files: { name: 'ArchiveXL', ids: [library mods that supply it] }.
 // It is met as soon as any supplier is on.
 const autoNeedsMe = (x, id) => (x.autoRequires || []).some((n) => n.ids.includes(id) && !n.ids.some((i) => byId(i)?.enabled));
+// "Oct 2026" from "2026-10-26" (the upload date a Nexus download carries in its folder name)
+function fmtMonth(day) {
+  const d = new Date(`${day}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+}
+// Another library mod that looks like a different version of this one, and is on too.
+const otherVersionsOn = (m) => (m.otherVersions || []).map((id) => byId(id)).filter((x) => x?.enabled);
 function warningFor(m) {
+  const needs = needsWarning(m);
+  if (!m.enabled) return needs;
+  const dup = otherVersionsOn(m);
+  const twice = dup.length ? `Another version is on too: ${listNames(dup.map((d) => d.version ? `${d.name} v${d.version}` : d.name))}` : '';
+  return [needs, twice].filter(Boolean).join('. ');
+}
+function needsWarning(m) {
   const all = mods();
   if (!m.enabled) {
     if (!m.framework && !all.some((x) => x.requires?.includes(m.id) || autoNeedsMe(x, m.id))) return '';
@@ -204,7 +218,9 @@ function renderHeader() {
   const sub = $('#pageSub');
   if (st && S.status === 'ready') {
     const on = st.mods.filter((m) => m.enabled).length;
-    sub.textContent = `${nf.format(on)} of ${plural(st.mods.length, 'mod')} on · ${plural(st.deployedCount || 0, 'file')} in the game folder now`;
+    sub.textContent = `${nf.format(on)} of ${plural(st.mods.length, 'mod')} on · ${plural(st.deployedCount || 0, 'file')} in the game folder now`
+      + (st.game?.version ? ` · Game ${st.game.version}` : '');
+    if (st.game?.updated) sub.title = `Cyberpunk ${st.game.version || ''} updated ${st.game.updated}`.replace('  ', ' ');
   } else sub.innerHTML = '&nbsp;';
 }
 
@@ -293,6 +309,8 @@ function rowTextHTML(m, showGroup, i) {
   const meta = [];
   if (m.pending) meta.push(`<span class="meta-pending">${m.pending === 'on' ? 'Turning on' : 'Turning off'}</span>`);
   meta.push(plural(m.files, 'file'));
+  if (m.version) meta.push(`v${esc(m.version)}`);
+  if (m.uploaded) meta.push(`<span title="Uploaded ${esc(m.uploaded)}">${esc(fmtMonth(m.uploaded))}</span>`);
   if (showGroup) meta.push(esc(m.group));
   const conflict = m.enabled && m.conflicts > 0;
   const conflictText = conflict ? `Shares ${plural(m.conflicts, 'file')} with other mods that are on` : '';

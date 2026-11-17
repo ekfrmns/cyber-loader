@@ -79,7 +79,8 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(m["Fancy"]["requires"], ["Core"])
         self.assertEqual(m["Fancy"]["group"], "Content")
         self.assertEqual(set(m["Core"]), {"id", "name", "group", "files", "enabled", "pending", "framework",
-                                          "requires", "autoRequires", "conflicts"})
+                                          "requires", "autoRequires", "conflicts", "nexusId", "version", "uploaded", "otherVersions"})
+        self.assertEqual((m["Core"]["nexusId"], m["Core"]["version"], m["Core"]["uploaded"], m["Core"]["otherVersions"]), (None, None, None, []))
         self.assertEqual(m["Fancy"]["autoRequires"], [])
 
     def test_toggle_preview_apply_cycle(self):
@@ -262,8 +263,11 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.put(f"/api/import/file?token={t}&path=Second.zip", buf.getvalue())[0], 400)
         code, r = self.call("POST", "/api/import/finish", {"token": t})
         self.assertEqual(code, 200, r)
-        self.assertEqual(r["id"], "Foo")
-        self.assertTrue((self.app.cfg.library / "Foo" / "archive" / "pc" / "mod" / "y.archive").exists())
+        self.assertEqual(r["id"], "Foo-1234-1-0-1700000000")        # the file's own name is kept: Nexus number, version, date
+        self.assertTrue((self.app.cfg.library / "Foo-1234-1-0-1700000000" / "archive" / "pc" / "mod" / "y.archive").exists())
+        code, s = self.call("GET", "/api/state")
+        foo = {x["id"]: x for x in s["mods"]}["Foo-1234-1-0-1700000000"]
+        self.assertEqual((foo["name"], foo["nexusId"], foo["version"], foo["uploaded"]), ("Foo", 1234, "1.0", "2023-11-14"))
 
     def test_conflict_ordering_helper(self):
         L = self.app.library

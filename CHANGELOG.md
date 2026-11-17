@@ -2,6 +2,13 @@
 
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = changes that need your data migrated.
 
+## 1.4.0 - 2026-11-17
+Version and upload date on every mod, imports that keep their name, and a warning when two versions of one mod are on.
+- **Version and upload date.** Each mod's row now shows its version and the month it was uploaded, like "6 files · v1.28.8 · Oct 2026", when its library folder name has them (Nexus downloads do). Hover the month for the full date. The page subtitle ends with your game's version ("Game 2.5"), and its tooltip gives the date of the game's last update. The older Nexus naming style writes versions as "2-0-1"; those are shown as "2.0.1".
+- **Imports keep the file's name.** A mod you drag into the window, or import any other way, now keeps its original file name inside the library, so its Nexus number, version and date are not lost (they used to be cleaned away, so Setup history could not name the old version of those mods). The name you see is still cleaned. Importing the same file twice adds " (2)".
+- **Two versions of one mod.** If the library holds two versions of the same Nexus mod (same Nexus number and the same name apart from the version) and you turn both on, the row warns "Another version is on too" and Review changes lists it once. Two different files of one Nexus page, like a body and a head, or four tattoo colours, are not treated as versions of each other.
+- API (additive, see `docs/API.md`): each mod has `nexusId`, `version`, `uploaded` and `otherVersions`; `game` has `version` and `updated`. Nothing was removed or changed.
+
 ## 1.3.0 - 2026-11-17
 Move a mod to another category.
 - Right-click a mod, **"Move to category…"**: pick Framework, Body, Characters, Clothing, Gameplay, Content or Other. The choice is saved in the mod's own `.mod.json`, so the name-based guess never overrides it again. Before this, a mod that matched no keyword stayed in Other with no way to move it.
