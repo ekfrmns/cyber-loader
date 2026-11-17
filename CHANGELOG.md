@@ -7,7 +7,7 @@ A Game folder screen, so you can change which Cyberpunk folder the app uses with
 - **Game folder screen** ("..." menu). Shows the folder in use and its game version. Type or paste a path (the game's folder or its `Cyberpunk2077.exe` both work) and it checks that it really is Cyberpunk 2077 before saving. **Browse…** opens a folder dialog (needs this version's window host).
 - **Safe by design.** The app refuses to change the folder while any mod is placed in the old one, while the game is running, or while an Apply is running, because switching with mods placed would lose track of them. Turn everything off and Apply first, then switch. Nothing is moved, copied or deleted in either game folder when you switch. A folder given on the command line or by environment variable stays locked and the screen says so.
 - **Setup keeps your game folder.** Installing a new version over an old one now keeps the game folder (and data folder) already in `cyberloader.json` instead of detecting it again.
-- Non-ASCII folder paths are written as plain text escapes in `cyberloader.json`, so the file stays readable by every tool.
+- Folder paths with accents or other non-English letters are saved as the real letters in `cyberloader.json` (not as escape codes), so Setup can read them back.
 - API (additive, see `docs/API.md`): `GET/POST /api/game-folder` and `POST /api/game-folder/check`. Window host: `cyberHost.pickFolder()` (see `docs/HOST-API.md`). Nothing was removed or changed.
 
 ## 1.4.0 - 2026-11-17
