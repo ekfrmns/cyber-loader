@@ -806,7 +806,106 @@ function renderProfileMenu() {
 function renderMoreMenu() {
   const item = (act, ic, label) =>
     `<button class="menu-item" type="button" role="menuitem" data-act="${act}" tabindex="-1">${icon(ic, 18)}<span class="label"><span>${esc(label)}</span></span></button>`;
-  $('#moreMenu').innerHTML = [item('history', 'restore', 'Setup history…'), item('trash', 'trash', 'Deleted mods…'), item('appearance', 'appearance', 'Appearance…')].join('');
+  $('#moreMenu').innerHTML = [item('history', 'restore', 'Setup history…'), item('trash', 'trash', 'Deleted mods…'), item('game', 'folder', 'Game folder…'), item('appearance', 'appearance', 'Appearance…')].join('');
+}
+
+// ---------- Game folder: see it, and change it (the engine refuses while mods are placed, the game runs, or an apply runs) ----------
+const gf = { info: null, check: null, seq: 0, timer: null, busy: false };
+const canBrowse = () => typeof host()?.pickFolder === 'function';   // only inside the CyberLoader window
+
+function gfGameLine(g) {
+  return [g.version ? `Game ${g.version}` : '', g.updated ? `updated ${fmtDay(g.updated)}` : ''].filter(Boolean).join(' · ');
+}
+
+function gfRender() {
+  const i = gf.info;
+  $('#gfPath').textContent = i.path || 'Not set';
+  const line = i.found ? gfGameLine(i) : '';
+  $('#gfStatus').innerHTML = i.found
+    ? `<span class="gf-dot ok"></span><span>Cyberpunk 2077 found${line ? ` · ${esc(line)}` : ''}</span>`
+    : `<span class="gf-dot bad"></span><span>${i.path ? 'Cyberpunk 2077 isn’t at this folder' : 'No game folder chosen yet'}</span>`;
+  const lock = $('#gfLock');
+  lock.hidden = i.canChange;
+  $('#gfLockText').textContent = i.reason || '';
+  const input = $('#gfInput');
+  input.disabled = !i.canChange;
+  $('#gfBrowse').hidden = !canBrowse();
+  $('#gfBrowse').disabled = !i.canChange;
+  $('#gfChange').classList.toggle('is-off', !i.canChange);
+  const c = gf.check;
+  const msg = $('#gfMsg');
+  let tone = '', text = '';
+  if (!i.canChange) { text = ''; }
+  else if (!c) { text = input.value.trim() ? 'Checking…' : 'Use the full path, for example C:\\Games\\Cyberpunk 2077.'; }
+  else if (c.same) { tone = 'ok'; text = 'That is the folder in use now.'; }
+  else if (c.found) { tone = 'ok'; text = [c.message.replace(/\.$/, ''), gfGameLine(c)].filter(Boolean).join(' · ') + (c.path !== input.value.trim() ? `. Will use ${c.path}` : '.'); }
+  else { tone = 'bad'; text = c.message; }
+  msg.textContent = text;
+  msg.dataset.tone = tone;
+  input.setAttribute('aria-invalid', tone === 'bad' ? 'true' : 'false');
+  $('#gfSave').disabled = gf.busy || !(i.canChange && c?.found && !c.same);
+}
+
+async function gfRunCheck() {
+  const text = $('#gfInput').value.trim();
+  const mine = ++gf.seq;
+  if (!text) { gf.check = null; gfRender(); return; }
+  try {
+    const c = await api.post('/api/game-folder/check', { path: text });
+    if (mine !== gf.seq) return;                 // a newer keystroke is already being checked
+    gf.check = c;
+  } catch (e) {
+    if (mine !== gf.seq) return;
+    gf.check = { found: false, same: false, path: text, message: e.message };
+  }
+  gfRender();
+}
+
+function gfOnInput() {
+  gf.check = null;
+  gf.seq++;
+  clearTimeout(gf.timer);
+  gfRender();
+  gf.timer = setTimeout(gfRunCheck, 250);
+}
+
+async function openGameFolder(trigger) {
+  gf.info = await api.get('/api/game-folder');
+  gf.check = null;
+  gf.busy = false;
+  gf.seq++;                      // an answer still in flight from an earlier visit must not land here
+  clearTimeout(gf.timer);
+  $('#gfInput').value = '';
+  gfRender();
+  openModal($('#gameSheet'), { trigger, initialFocus: gf.info.canChange ? '#gfInput' : '[data-close]' });
+}
+
+async function gfBrowse() {
+  let picked = null;
+  try { picked = await host().pickFolder($('#gfInput').value.trim() || gf.info?.path || ''); } catch { /* the dialog failed: stay on the text field */ }
+  if (!picked) return;
+  $('#gfInput').value = picked;
+  clearTimeout(gf.timer);
+  gfRunCheck();
+}
+
+async function gfSave() {
+  const c = gf.check;
+  if (!c?.found || c.same || gf.busy) return;
+  gf.busy = true;
+  gfRender();
+  try {
+    const r = await api.post('/api/game-folder', { path: c.path });
+    closeTop();
+    toast(r.changed ? 'Game folder changed. Nothing was moved or deleted.' : 'That folder is already in use.', { tone: 'ok' });
+    try { await refresh(); } catch { /* the next poll picks the new state up */ }
+  } catch (e) {
+    toast(e.message, { tone: 'error', timeout: 7000 });
+    try { gf.info = await api.get('/api/game-folder'); } catch { /* keep what is shown */ }
+  } finally {
+    gf.busy = false;
+    if (isOpen($('#gameSheet'))) gfRender();
+  }
 }
 
 // ---------- Deleting mods: an in-app trash ----------
@@ -1238,6 +1337,8 @@ async function runMenuAction(act, trigger) {
       await openHistory(trigger);
     } else if (act === 'trash') {
       await openTrash(trigger);
+    } else if (act === 'game') {
+      await openGameFolder(trigger);
     } else if (act === 'appearance') {
       syncSettingsForm();
       openModal($('#settingsSheet'), { trigger, initialFocus: 'input[name="theme"]:checked' });
@@ -1395,6 +1496,10 @@ function wire() {
   $('#ndSearch').addEventListener('input', needsFilter);
   $('#gpBody').addEventListener('click', (e) => { const b = e.target.closest('[data-group-pick]'); if (b) pickGroup(b.dataset.groupPick); });
   $('#ndSave').addEventListener('click', (e) => saveNeeds(e.currentTarget));
+  $('#gfInput').addEventListener('input', gfOnInput);
+  $('#gfInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('#gfSave').disabled) { e.preventDefault(); gfSave(); } });
+  $('#gfBrowse').addEventListener('click', gfBrowse);
+  $('#gfSave').addEventListener('click', gfSave);
   $('#historySheet').addEventListener('click', historyClick);
   $('#trashSheet').addEventListener('click', trashClick);
   $('#trEmpty').addEventListener('click', (e) => emptyTrash(e.currentTarget));

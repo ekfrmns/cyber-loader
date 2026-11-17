@@ -12,7 +12,11 @@ cyberHost.toggleMaximize()              // maximize <-> restore
 cyberHost.close()                       // asks the host to close the window (it confirms if an apply is running)
 cyberHost.setBackground('#rrggbb')      // colour shown behind the page (resize flashes, before first paint); call when the theme changes
 cyberHost.onState(fn)                   // fn({ maximized: boolean, focused: boolean }) is called at once and on every change
+cyberHost.pickFolder(start?: string)    // Promise<string | null>: opens the Windows folder dialog (modal to the window, starting at `start`
+                                        // when that folder exists) and resolves with the chosen folder's full path, or null if cancelled.
+                                        // Added with 1.5.0; an older exe does not have it, so feature-detect: typeof cyberHost.pickFolder === 'function'.
 ```
+`pickFolder` only returns the path; the host reads and writes nothing in that folder. The UI uses it for the "Browse…" button of the Game folder sheet (it also works without it: that sheet has a text field).
 The host also sets attributes on `<html>` so CSS can react without JS: `is-host` (class, always), `data-maximized` (present while maximized), `data-focused` (present while the window is active), `data-frameless` (present when frameless is on).
 
 ## What the host does for you (do not rebuild it in the UI)

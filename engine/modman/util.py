@@ -24,14 +24,14 @@ def read_json(path, default=None):
         return default
 
 
-def write_json(path, obj) -> None:
+def write_json(path, obj, ensure_ascii: bool = True) -> None:
     """Atomic write: temp file in the same folder, then replace."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(obj, f, indent=1)
+            json.dump(obj, f, indent=1, ensure_ascii=ensure_ascii)
         os.replace(tmp, path)
     except BaseException:
         try:

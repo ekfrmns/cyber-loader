@@ -135,6 +135,8 @@ def route(app: App, method: str, path: str, body: dict):
             return dict(app.job)
         if P == "/api/settings":
             return app.cfg.settings()
+        if P == "/api/game-folder":
+            return app.game_folder()
         if P == "/api/trash":
             return app.list_trash()
         if P == "/api/snapshots":
@@ -186,6 +188,10 @@ def route(app: App, method: str, path: str, body: dict):
         return app.restore_trash(str(body["id"]))
     if P == "/api/trash/empty":
         return app.empty_trash(str(body["id"]) if body.get("id") else None)
+    if P == "/api/game-folder/check":
+        return app.check_game_folder(body.get("path"))
+    if P == "/api/game-folder":
+        return app.set_game_folder(body.get("path"))
     if P == "/api/settings":
         return app.cfg.update_settings(body.get("theme"), body.get("accent"))
     raise ApiError(404, "unknown endpoint")

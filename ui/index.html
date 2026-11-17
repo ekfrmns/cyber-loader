@@ -160,6 +160,38 @@
   </div>
 </section>
 
+<!-- Game folder -->
+<section id="gameSheet" class="sheet sheet-sm" role="dialog" aria-modal="true" aria-labelledby="gfTitle" hidden>
+  <header class="sheet-head">
+    <div>
+      <h2 class="sheet-title" id="gfTitle">Game folder</h2>
+      <p class="sheet-sub">Where Cyberpunk 2077 is installed. Mods are placed in here.</p>
+    </div>
+    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
+  </header>
+  <div class="sheet-body">
+    <div class="gf-current">
+      <div class="gf-label">In use now</div>
+      <div class="gf-path" id="gfPath"></div>
+      <div class="gf-status" id="gfStatus"></div>
+    </div>
+    <div class="callout" id="gfLock" hidden><span data-icon="info" data-size="18"></span><span id="gfLockText"></span></div>
+    <div class="input-field" id="gfChange">
+      <span id="gfLabel">Change to</span>
+      <div class="gf-row">
+        <input id="gfInput" type="text" autocomplete="off" spellcheck="false" placeholder="Paste the full path of the game folder" aria-labelledby="gfLabel" aria-describedby="gfMsg">
+        <button class="btn" id="gfBrowse" type="button" hidden>Browse…</button>
+      </div>
+      <p class="gf-msg" id="gfMsg" role="status"></p>
+    </div>
+  </div>
+  <footer class="sheet-foot">
+    <span class="spacer"></span>
+    <button class="btn" type="button" data-close>Cancel</button>
+    <button class="btn btn-primary" id="gfSave" type="button" disabled>Use this folder</button>
+  </footer>
+</section>
+
 <!-- Deleted mods (the in-app trash) -->
 <section id="trashSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="trTitle" hidden>
   <header class="sheet-head">

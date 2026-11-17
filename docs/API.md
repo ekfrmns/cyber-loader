@@ -116,6 +116,28 @@ If the contract needs to change, the UI session writes the request to `docs/API-
          Stages that setup: the mod list becomes exactly the snapshot's (mods no longer in the library are skipped and listed in
          `missing`). Nothing in the game changes until the usual preview + apply. 404 unknown id, 423 while an apply runs.
 
+    Game folder (since 1.5.0). The folder is set by Setup and saved as "game" in the install's `cyberloader.json`; these let the app change it.
+    GET  /api/game-folder       -> { path: string|null,        // the folder in use; null if none was ever set
+                                     found: boolean,           // it holds bin/x64/Cyberpunk2077.exe
+                                     version?, updated?,       // as in /api/state `game`, when found
+                                     deployedCount: number,    // files from mods currently placed in it
+                                     canChange: boolean,
+                                     reason: string|null }     // when !canChange: plain words why (shown as-is)
+    POST /api/game-folder/check { path }                      -> { path,        // cleaned up: quotes removed; if the exe or its bin / bin/x64 folder was given, the game folder above it
+                                                                   isFolder, found, same,   // same = it is the folder in use already
+                                                                   message,     // plain words ("Cyberpunk 2077 found." or what is wrong)
+                                                                   version?, updated? }
+         Changes nothing. For live validation while typing or after the Browse dialog.
+    POST /api/game-folder       { path }                      -> { ok, changed, ...same shape as GET }
+         Validates like `check`, then saves the folder atomically into `cyberloader.json` (every other key is kept; a damaged file is never
+         overwritten) and uses it at once, no restart. Nothing is copied, moved or deleted in either game folder; the only other thing
+         that changes is that the engine's records of directories it created and of files it left behind (`state\deployed.json`
+         `dirs` / `left`, which describe the OLD folder) are cleared. Choosing the folder already in use is a no-op (`changed: false`).
+         Refused, leaving everything as it was: 400 not a Cyberpunk 2077 folder (message from `check`); 409 mods are still placed
+         in the current folder ("Turn everything off and apply first, then change the folder": `state\deployed.json` records files
+         relative to it), 409 the game is running, 409 the folder was given on the command line (`--game`, MODMAN_GAME) or there is
+         no `cyberloader.json`, 423 an apply is running, 500 the settings file could not be saved.
+
     GET  /api/settings          -> { theme: "system"|"light"|"dark", accent: "#rrggbb" }
     POST /api/settings          { theme?, accent? }       -> same shape
 

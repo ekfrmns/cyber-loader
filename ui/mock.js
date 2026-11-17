@@ -217,12 +217,41 @@ for (const set of profiles.values()) for (const id of [...set]) if (!byId.has(id
 
 let current = 'Core + Vehicles + extras';
 let enabled = new Set(profiles.get(current));
-let deployed = new Set(enabled);
+let deployed = q.get('gfFree') === '1' ? new Set() : new Set(enabled);   // ?gfFree=1: nothing placed, so the game folder can be changed
 let running = q.get('running') === '1';
 let job = null;
 let settings = { theme: 'system', accent: '#0A84FF' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('cmm.settings') || '{}')); } catch { /* ignore */ }
 const imports = new Map();
+
+// Sample game folders for the "Game folder" sheet (invented paths). Anything else that looks like a path is "not the game".
+const GAME_DIRS = {
+  'c:\\program files (x86)\\steam\\steamapps\\common\\cyberpunk 2077': { version: '2.5', updated: '2026-10-21' },
+  'e:\\gog games\\cyberpunk 2077': { version: '2.3', updated: '2026-06-02' },
+  'c:\\games\\cyberpunk 2077 (copy)': { updated: '2026-03-14' },
+};
+let gameDir = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cyberpunk 2077';
+const gameKey = (p) => p.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+function checkGame(raw) {
+  let text = String(raw || '').trim().replace(/^"|"$/g, '').trim();
+  const out = { path: text, isFolder: false, found: false, same: false };
+  if (!text) return { ...out, message: 'Paste the full path of your Cyberpunk 2077 folder.' };
+  if (!/^[a-z]:[\\/]/i.test(text)) return { ...out, message: 'Use the full path, starting with the drive letter, like C:\\Games\\Cyberpunk 2077.' };
+  text = text.replace(/\\bin\\x64\\cyberpunk2077\.exe$/i, '').replace(/\\bin(\\x64)?$/i, '');
+  out.path = text;
+  if (/missing|nope/i.test(text)) return { ...out, message: 'That folder doesn’t exist.' };
+  const info = GAME_DIRS[gameKey(text)];
+  out.isFolder = true;
+  if (!info) return { ...out, message: 'This doesn’t look like Cyberpunk 2077: bin\\x64\\Cyberpunk2077.exe isn’t in it. Choose the main game folder, the one that contains the bin folder.' };
+  return { ...out, found: true, same: gameKey(text) === gameKey(gameDir), message: 'Cyberpunk 2077 found.', ...info };
+}
+function gameFolder() {
+  const reason = running ? 'The game is running. Close it, then change the folder.'
+    : job && !job.final ? 'An apply is running. Wait for it to finish, then change the folder.'
+    : deployed.size ? 'Some mods are still placed in the current game folder. Turn everything off and apply first, then change the folder.' : null;
+  const info = GAME_DIRS[gameKey(gameDir)] || {};
+  return { path: gameDir, found: true, ...info, deployedCount: [...deployed].reduce((a, id) => a + (byId.get(id)?.files || 0), 0), canChange: !reason, reason };
+}
 let trash = [];   // deleted mods: { tid, m, at }
 
 const sameSet = (a, b) => a.size === b.size && [...a].every((x) => b.has(x));
@@ -270,7 +299,7 @@ function view(m) {
 function state() {
   const v = mods.map(view);
   return {
-    game: { running, found: true, version: '2.5', updated: '2026-10-21' },
+    game: { running, found: true, ...(GAME_DIRS[gameKey(gameDir)] || {}) },
     profile: current,
     profiles: [...profiles.keys()],
     profileDirty: current ? !sameSet(enabled, profiles.get(current)) : false,
@@ -471,6 +500,20 @@ export async function handle(method, url, body = {}) {
       return ok(progress());
 
 
+    case 'GET /api/game-folder':
+      return ok(gameFolder());
+    case 'POST /api/game-folder/check':
+      return ok(checkGame(body.path));
+    case 'POST /api/game-folder': {
+      const c = checkGame(body.path);
+      if (!c.found) return err(400, c.message);
+      const g = gameFolder();
+      if (!g.canChange) return err(job && !job.final ? 423 : 409, g.reason);
+      const changed = !c.same;
+      if (changed) gameDir = c.path;
+      return ok({ ok: true, changed, ...gameFolder() });
+    }
+
     case 'GET /api/settings':
       return ok({ ...settings });
     case 'POST /api/settings':
@@ -536,6 +579,8 @@ function installFakeHost() {
     toggleMaximize() { state.maximized = !state.maximized; emit(); },
     close() { note('Fake host: close'); },
     setBackground(c) { document.body.style.background = String(c); window.__fakeHostBackground = String(c); },
+    // Stands in for the native folder dialog: picks a sample folder (?pickCancel=1: the user cancels).
+    pickFolder() { return new Promise((r) => setTimeout(() => r(q.get('pickCancel') === '1' ? null : 'E:\\GOG Games\\Cyberpunk 2077'), 400)); },
     onState(fn) { listeners.push(fn); try { fn({ ...state }); } catch (e) { console.error(e); } },
   };
   // Like the real host: a press on [data-window-drag] (not on a control) starts a move; a quick

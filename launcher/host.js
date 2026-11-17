@@ -8,6 +8,8 @@
   var listeners = [];
   var frameless = false;
   var handles = [];
+  var picks = {};      // pending pickFolder() calls: id -> resolve
+  var pickSeq = 0;
 
   function root() { return document.documentElement; }
   function paint() {
@@ -27,6 +29,9 @@
       state = { maximized: !!d.maximized, focused: !!d.focused, radius: +d.radius || 0 };
       paint();
       for (var i = 0; i < listeners.length; i++) { try { listeners[i]({ maximized: state.maximized, focused: state.focused }); } catch (_) {} }
+    } else if (d && d.type === 'pickFolder') {
+      var done = picks[d.id];
+      if (done) { delete picks[d.id]; done(d.path || null); }
     }
   });
 
@@ -36,6 +41,13 @@
     toggleMaximize: function () { post({ cmd: 'toggleMaximize' }); },
     close: function () { post({ cmd: 'close' }); },
     setBackground: function (c) { post({ cmd: 'background', color: String(c) }); },
+    pickFolder: function (start) {
+      return new Promise(function (resolve) {
+        var id = String(++pickSeq);
+        picks[id] = resolve;
+        post({ cmd: 'pickFolder', id: id, start: String(start || '') });
+      });
+    },
     onState: function (fn) {
       listeners.push(fn);
       try { fn({ maximized: state.maximized, focused: state.focused }); } catch (_) {}

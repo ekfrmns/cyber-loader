@@ -225,10 +225,20 @@ static class Installer
         if (string.IsNullOrEmpty(o.InstallDir)) o.InstallDir = DefaultInstallDir();
         if (string.IsNullOrEmpty(o.Game))
         {
+            // An upgrade keeps the folder the app already uses (the app can change it since 1.5.0), if it is still a game folder.
+            string oldGame = ReadConfigValue(o.InstallDir, "game");
+            if (!string.IsNullOrEmpty(oldGame) && Detect.IsGame(oldGame)) o.Game = oldGame;
+        }
+        if (string.IsNullOrEmpty(o.Game))
+        {
             List<string> g = Detect.FindGames();
             if (g.Count > 0) o.Game = g[0];
         }
-        if (string.IsNullOrEmpty(o.Data)) o.Data = DefaultData(o.InstallDir, o.Game);
+        if (string.IsNullOrEmpty(o.Data))
+        {
+            string oldData = ReadConfigValue(o.InstallDir, "data");
+            o.Data = !string.IsNullOrEmpty(oldData) ? oldData : DefaultData(o.InstallDir, o.Game);
+        }
         o.Version = PayloadVersion();
     }
 

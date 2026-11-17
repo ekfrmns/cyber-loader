@@ -420,6 +420,12 @@ class MainForm : Form
                     if (ht != 0) { ReleaseCapture(); SendMessage(Handle, WM_NCLBUTTONDOWN, (IntPtr)ht, IntPtr.Zero); }
                 }
                 break;
+            case "pickFolder":
+                object pid, pstart;
+                msg.TryGetValue("id", out pid);
+                msg.TryGetValue("start", out pstart);
+                PickFolder(Convert.ToString(pid), Convert.ToString(pstart));
+                break;
             case "log": // development aid: only written when CYBERLOADER_DEBUG=1
                 object txt;
                 if (msg.TryGetValue("text", out txt)) Log("page: " + Convert.ToString(txt));
@@ -436,6 +442,41 @@ class MainForm : Form
                 }
                 break;
         }
+    }
+
+    bool picking;
+
+    // Folder dialog for cyberHost.pickFolder(): answers the page with {type:"pickFolder", id, path} (path null = cancelled or failed).
+    // It only returns the path the user chose; nothing is read from or written to that folder.
+    void PickFolder(string id, string start)
+    {
+        string result = null;
+        if (!picking)
+        {
+            picking = true;
+            try
+            {
+                using (FolderBrowserDialog d = new FolderBrowserDialog())
+                {
+                    d.Description = "Choose the Cyberpunk 2077 folder (the one that contains the bin folder)";
+                    d.ShowNewFolderButton = false;
+                    try { if (!string.IsNullOrEmpty(start) && Directory.Exists(start)) d.SelectedPath = start; } catch (Exception) { }
+                    if (d.ShowDialog(this) == DialogResult.OK) result = d.SelectedPath;
+                }
+            }
+            catch (Exception ex) { Log("pickFolder failed: " + ex.Message); }
+            finally { picking = false; }
+        }
+        if (web == null || web.CoreWebView2 == null) return;
+        try
+        {
+            Dictionary<string, object> reply = new Dictionary<string, object>();
+            reply["type"] = "pickFolder";
+            reply["id"] = id;
+            reply["path"] = result;
+            web.CoreWebView2.PostWebMessageAsJson(json.Serialize(reply));
+        }
+        catch (Exception) { }
     }
 
     static int HitTestCode(string edge)

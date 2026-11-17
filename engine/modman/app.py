@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from . import __version__, msgpack_min
-from .config import Config
+from .config import NOT_SET, Config, check_game_folder
 from .deploy import (Entry, Plan, State, _identical, _stat, apply_plan, build_desired, conflict_counts, game_running,
                      intact, make_plan, preflight)
 from .library import GROUPS, Library, clean_name, normalize_root
@@ -426,6 +426,63 @@ class App:
                                             for m in s["mods"] if m["id"] not in self.library.mods],
                                 "changed": sum(1 for m in s["mods"] if self._changed_since(m))}
             return view
+
+    # ------------------------------------------------------------ game folder (changeable after install)
+    def _game_block_reason(self, fresh: bool):
+        """Why the game folder can't be changed right now, in plain words, or None. Order: what never changes, then what
+        is happening now, then what is in the game folder."""
+        why = self.cfg.game_locked_reason()
+        if why:
+            return why
+        if self.job["state"] == "running":
+            return "An apply is running. Wait for it to finish, then change the folder."
+        if (preflight(self.cfg) if fresh else {"game_running": game_running()})["game_running"]:
+            return "The game is running. Close it, then change the folder."
+        if self.state.files:
+            return ("Some mods are still placed in the current game folder. Turn everything off and apply first, "
+                    "then change the folder.")
+        return None
+
+    def game_folder(self) -> dict:
+        with self.lock:
+            found = self.cfg.game_found
+            return {"path": None if self.cfg.game == NOT_SET else str(self.cfg.game), "found": found,
+                    **(self.cfg.game_info() if found else {}), "deployedCount": len(self.state.files),
+                    "canChange": (reason := self._game_block_reason(False)) is None, "reason": reason}
+
+    def check_game_folder(self, path) -> dict:
+        """Say what is at this path (nothing is changed). `same` = it is the folder in use already."""
+        out = check_game_folder(path)
+        out["same"] = bool(out["found"] and self.cfg.game != NOT_SET
+                           and os.path.normcase(os.path.normpath(out["path"])) == os.path.normcase(os.path.normpath(str(self.cfg.game))))
+        return out
+
+    def set_game_folder(self, path) -> dict:
+        """Use another game folder from now on. Only the settings file (and the engine's own records) change: nothing is
+        copied, moved or deleted in either game folder. Refused while anything is placed in the old folder (state\\deployed.json
+        records files relative to it), while the game runs, or while an apply runs."""
+        with self.lock:
+            chk = check_game_folder(path)
+            if not chk["found"]:
+                raise ApiError(400, chk["message"])
+            reason = self._game_block_reason(True)
+            if reason:
+                raise ApiError(423 if self.job["state"] == "running" else 409, reason)
+            if self.check_game_folder(path)["same"]:
+                return {"ok": True, "changed": False, **self.game_folder()}
+            try:
+                self.cfg.save_game(Path(chk["path"]))
+            except (OSError, ValueError) as ex:
+                raise ApiError(500, f"Couldn’t save the new game folder, so nothing changed. {ex}")
+            # Nothing is placed any more, so these records only described the old folder: drop them so they can never be
+            # matched against the new one. (Records only; no file or folder is touched.)
+            if self.state.dirs or self.state.left:
+                self.state.dirs, self.state.left = [], set()
+                try:
+                    self.state.save()
+                except OSError:
+                    pass        # the folder is already changed; these records are only tidiness, so do not report a failure
+            return {"ok": True, "changed": True, **self.game_folder()}
 
     # ------------------------------------------------------------ import
     def import_path(self, path: str, name: str | None = None) -> dict:
