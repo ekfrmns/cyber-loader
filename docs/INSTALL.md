@@ -20,5 +20,5 @@ Needs on the build machine: Python 3.13, the C# compiler that ships with Windows
     python tools\package.py            full build from main: clean tree, tests, CHANGELOG section for the version; tags v<version>
     python tools\package.py --test     quick build from the working tree (no checks, no tag)
 
-Output: `dist\CyberLoader-Setup-<version>.exe` and a `.sha256` file. The installer contains the launcher, a private Python runtime, the committed engine and UI for the version, licences (`installer\THIRD_PARTY.txt`) and the optional 7-Zip. Nothing about the build machine is included.
+Output: one folder per version, `dist\<version>\`, holding `CyberLoader-Setup-<version>.exe`, its `.sha256` file and `RELEASE-NOTES.md` (what changed since the previous version, from CHANGELOG.md). Quick `--test` builds go to `dist\<version>-test\` (never share those). The installer contains the launcher, a private Python runtime, the committed engine and UI for the version, licences (`installer\THIRD_PARTY.txt`) and the optional 7-Zip. Nothing about the build machine is included.
 Where the app reads its settings: `<install dir>\cyberloader.json` (`game`, `data`); the engine also honours `MODMAN_GAME` / `MODMAN_DATA` and `CYBERLOADER_CONFIG` for development and tests.

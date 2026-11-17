@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -41,6 +42,22 @@ def load_setup_module():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def release_notes(version: str, digest: str, size_mb: float, is_test: bool) -> str:
+    """RELEASE-NOTES.md for dist/<version>/: what changed since the previous version (from CHANGELOG.md) plus the checksum."""
+    text = (REPO / "CHANGELOG.md").read_text(encoding="utf-8-sig").replace("\r\n", "\n")
+    sections = re.findall(r"^## (\d+\.\d+\.\d+)[^\n]*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    versions = [v for v, _ in sections]
+    body = dict(sections).get(version, "(no CHANGELOG section for this version)").strip()
+    prev = versions[versions.index(version) + 1] if version in versions and versions.index(version) + 1 < len(versions) else None
+    head = f"# Cyber Loader {version}\n\n"
+    if is_test:
+        head += "**Quick test build, not a release. Do not share.**\n\n"
+    head += f"Built {time.strftime('%Y-%m-%d')}. Installer: `CyberLoader-Setup-{version}.exe` ({size_mb:.1f} MB).\n"
+    head += f"SHA-256: `{digest}`\n\n"
+    head += f"## What changed since {prev}\n\n" if prev else "## What is in this version\n\n"
+    return head + body + "\n"
 
 
 def read_version() -> str:
@@ -97,9 +114,7 @@ def main() -> None:
     if not seven:
         sys.exit("7-Zip is not installed on this machine; it is copied into the installer as the optional component")
 
-    work = DIST / "build"
-    if work.exists():
-        shutil.rmtree(work)
+    work = Path(tempfile.mkdtemp(prefix="cyberloader-build-"))   # scratch space, removed when the build ends
     stage = work / "stage"
     stage.mkdir(parents=True)
 
@@ -122,7 +137,9 @@ def main() -> None:
 
     zip_dir(stage, work / "payload.zip")
     zip_dir(sz, work / "sevenzip.zip")
-    out = DIST / f"CyberLoader-Setup-{version}.exe"
+    outdir = DIST / (version + ("-test" if a.test else ""))      # dist/<version>/ holds that version's installer, checksum and notes
+    outdir.mkdir(parents=True, exist_ok=True)
+    out = outdir / f"CyberLoader-Setup-{version}.exe"
     ico = REPO / "launcher" / "cyberloader.ico"
     r = subprocess.run([str(CSC), "/nologo", "/target:winexe", f"/out:{out}", f"/win32icon:{ico}",
                         f"/resource:{work / 'payload.zip'},payload.zip", f"/resource:{work / 'sevenzip.zip'},sevenzip.zip",
@@ -133,7 +150,14 @@ def main() -> None:
     if r.returncode != 0:
         sys.exit("compile failed:\n" + r.stdout[-2000:] + r.stderr[-800:])
     digest = hashlib.sha256(out.read_bytes()).hexdigest()
-    (DIST / (out.name + ".sha256")).write_text(f"{digest}  {out.name}\n")
+    (outdir / (out.name + ".sha256")).write_text(f"{digest}  {out.name}\n")
+    (outdir / "RELEASE-NOTES.md").write_text(release_notes(version, digest, out.stat().st_size / 1e6, a.test), encoding="utf-8")
+    readme = DIST / "README.txt"
+    if not readme.exists():
+        readme.write_text("One folder per version. Each holds the installer (CyberLoader-Setup-<version>.exe), its .sha256 checksum\n"
+                          "and RELEASE-NOTES.md (what changed since the previous version). Send friends the .exe from the newest\n"
+                          "folder. Folders ending in -test are quick test builds, never share those. Made by tools\\package.py.\n", encoding="utf-8")
+    shutil.rmtree(work, ignore_errors=True)
     print(f"built {out}  ({out.stat().st_size / 1e6:.1f} MB)\nsha256 {digest}")
     if not a.test and not git("tag", "--list", f"v{version}"):
         git("tag", "-a", f"v{version}", "-m", f"CyberLoader {version}")

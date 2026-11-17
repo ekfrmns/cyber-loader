@@ -14,6 +14,18 @@ Windows may show a blue "Windows protected your PC" screen because the installer
 certutil -hashfile CyberLoader-Setup-<version>.exe SHA256
 ```
 
+## Screenshots
+
+All screenshots use invented sample mods.
+
+![The library with mods grouped into categories (dark theme)](screenshots/01-library-dark.png)
+
+| | |
+|---|---|
+| ![Light theme with an accent colour](screenshots/02-library-light.png) | ![Switching between profiles](screenshots/03-profiles.png) |
+
+![Review changes: exactly what Apply will add and remove](screenshots/04-review-changes.png)
+
 ## What it does
 
 - **Library:** every mod lives in its own folder, laid out like the game folder. Drag a `.zip`, `.7z`, `.rar` or a plain folder onto the window to add it. Nothing from an archive is ever run.
@@ -48,7 +60,7 @@ You need Windows, Python 3.13, 7-Zip, and the C# compiler that ships with Window
 cd engine
 python -I -m unittest discover -s tests      # run the tests
 cd ..
-python tools\package.py --test               # quick build into dist\
+python tools\package.py --test               # quick build into dist\<version>-test\
 ```
 
 Layout:
