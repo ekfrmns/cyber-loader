@@ -135,6 +135,11 @@ class Config:
         self.logs_dir = self.data / "logs"
         self.snapshots_dir = self.data / "snapshots"
         self.tmp_dir = self.data / "tmp"
+        # Save transfer (optional add-on): the game's saves folder, where the add-on lives, where backups of the saves go
+        saves_v = os.environ.get("MODMAN_SAVES") or inst.get("saves")
+        self.saves_dir = Path(saves_v) if saves_v else Path.home() / "Saved Games" / "CD Projekt Red" / "Cyberpunk 2077"
+        self.addons_dir = self.data / "addons"
+        self.save_backups_dir = self.data / "save-backups"
         self.ui = Path(ui) if ui else _find_ui()
         # Files at least this big are hardlinked; smaller ones are copied so a mod that rewrites its own
         # config in place can never alter the library copy.

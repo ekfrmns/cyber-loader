@@ -30,3 +30,7 @@ Thumbs.db
 dist/
 # local dev config (points the engine at a game/data folder)
 /cyberloader.json
+
+# .NET build output (add-ons)
+bin/
+obj/

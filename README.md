@@ -37,6 +37,7 @@ All screenshots use invented sample mods.
   - A file that already exists and is not Cyber Loader's blocks the apply. Nothing is overwritten.
   - Apply refuses to run while the game is open.
 - **Trash:** deleting a mod moves it to the app's own trash, so you can restore it.
+- **Change or move a character (optional add-on):** copy the gender, look, clothes, outfits or guns of one Cyberpunk save onto another, or just change a character's gender. It always makes a new save and backs up first. It is built on the MIT-licensed [CP2077SaveEditor](https://github.com/Deweh/CyberCAT-SimpleGUI) and is not part of the installer; see [docs/SAVE-TRANSFER.md](docs/SAVE-TRANSFER.md).
 - Light, dark or system theme with an accent colour.
 
 ## Install

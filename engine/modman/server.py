@@ -137,6 +137,8 @@ def route(app: App, method: str, path: str, body: dict):
             return app.cfg.settings()
         if P == "/api/game-folder":
             return app.game_folder()
+        if P == "/api/savetransfer":
+            return app.savetransfer_view()
         if P == "/api/trash":
             return app.list_trash()
         if P == "/api/snapshots":
@@ -188,6 +190,8 @@ def route(app: App, method: str, path: str, body: dict):
         return app.restore_trash(str(body["id"]))
     if P == "/api/trash/empty":
         return app.empty_trash(str(body["id"]) if body.get("id") else None)
+    if P in ("/api/savetransfer/inspect", "/api/savetransfer/name", "/api/savetransfer/preview", "/api/savetransfer/run"):
+        return app.savetransfer_call(P.rsplit("/", 1)[1], body)
     if P == "/api/game-folder/check":
         return app.check_game_folder(body.get("path"))
     if P == "/api/game-folder":

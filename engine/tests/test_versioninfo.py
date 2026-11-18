@@ -13,11 +13,11 @@ from modman.config import Config
 from modman.library import clean_name, variant_key
 from modman.snapshots import parse_origin, pretty_version
 
-V1 = "Input Loader v0.2.6 for 2.50 4575 0.2.6 2026-10-26T08-38Z Q6xF6llYP"
-V2 = "Input Loader v0.2.7 for 2.50 4575 0.2.7 2026-11-02T10-10Z AbCdEfGhI"
-BODY = "VTK Vanilla HD - Body 7054 3-4 2024-11-12T01-00Z aaaaaaaaa"
-HEAD = "VTK Vanilla HD - Head 7054 3-1 2024-11-12T01-00Z bbbbbbbbb"
-OLDSTYLE = "Dog Tags - Main File (AiO)-16403-1-02-1700000000"
+V1 = "Sample Loader v0.2.6 for 2.50 1234 0.2.6 2026-10-26T08-38Z Q6xF6llYP"
+V2 = "Sample Loader v0.2.7 for 2.50 1234 0.2.7 2026-11-02T10-10Z AbCdEfGhI"
+BODY = "Sample Skin Pack - Body 5678 3-4 2024-11-12T01-00Z aaaaaaaaa"
+HEAD = "Sample Skin Pack - Head 5678 3-1 2024-11-12T01-00Z bbbbbbbbb"
+OLDSTYLE = "Sample Item - Main File (AiO)-9876-1-02-1700000000"
 PLAIN = "Gamma Plain"
 
 
@@ -33,14 +33,14 @@ class NamesTest(unittest.TestCase):
         self.assertEqual(pretty_version(parse_origin(PLAIN)), None)
 
     def test_a_copy_suffix_does_not_hide_the_origin(self):
-        self.assertEqual(parse_origin(V1 + " (2)")["nexusId"], 4575)
+        self.assertEqual(parse_origin(V1 + " (2)")["nexusId"], 1234)
         self.assertEqual(parse_origin(OLDSTYLE + " (restored)")["version"], "1-02")
-        self.assertEqual(clean_name(V1 + " (2)"), "Input Loader v0.2.6 for 2.50 (2)")
+        self.assertEqual(clean_name(V1 + " (2)"), "Sample Loader v0.2.6 for 2.50 (2)")
         self.assertEqual(clean_name("Foo-1234-1-0-1700000000"), "Foo")
 
     def test_same_mod_different_version_share_a_key_but_two_files_of_one_page_do_not(self):
-        self.assertEqual(variant_key(V1, "Input Loader v0.2.6 for 2.50"), variant_key(V2, "Input Loader v0.2.7 for 2.50"))
-        self.assertNotEqual(variant_key(BODY, "VTK Vanilla HD - Body"), variant_key(HEAD, "VTK Vanilla HD - Head"))
+        self.assertEqual(variant_key(V1, "Sample Loader v0.2.6 for 2.50"), variant_key(V2, "Sample Loader v0.2.7 for 2.50"))
+        self.assertNotEqual(variant_key(BODY, "Sample Skin Pack - Body"), variant_key(HEAD, "Sample Skin Pack - Head"))
         self.assertIsNone(variant_key(PLAIN, PLAIN))
 
 
@@ -66,8 +66,8 @@ class AppTest(unittest.TestCase):
 
     def test_the_mod_view_has_version_date_and_nexus_number(self):
         m = self.mods()
-        self.assertEqual((m[V1]["nexusId"], m[V1]["version"], m[V1]["uploaded"]), (4575, "0.2.6", "2026-10-26"))
-        self.assertEqual((m[OLDSTYLE]["nexusId"], m[OLDSTYLE]["version"], m[OLDSTYLE]["uploaded"]), (16403, "1.02", "2023-11-14"))
+        self.assertEqual((m[V1]["nexusId"], m[V1]["version"], m[V1]["uploaded"]), (1234, "0.2.6", "2026-10-26"))
+        self.assertEqual((m[OLDSTYLE]["nexusId"], m[OLDSTYLE]["version"], m[OLDSTYLE]["uploaded"]), (9876, "1.02", "2023-11-14"))
         self.assertEqual((m[PLAIN]["nexusId"], m[PLAIN]["version"], m[PLAIN]["uploaded"]), (None, None, None))
 
     def test_other_versions_are_listed_for_both_sides_and_only_for_real_versions(self):

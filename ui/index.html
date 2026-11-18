@@ -192,6 +192,64 @@
   </footer>
 </section>
 
+<!-- Change or move a character between saves (optional add-on) -->
+<section id="xferSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="xfTitle" hidden>
+  <header class="sheet-head">
+    <div>
+      <h2 class="sheet-title" id="xfTitle">Change or move a character</h2>
+      <p class="sheet-sub" id="xfSub">Copy a look, clothes or gender from one save onto another. This makes a new save; your saves are never changed.</p>
+    </div>
+    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
+  </header>
+  <div class="sheet-body" id="xfBody">
+    <div id="xfForm">
+      <div class="callout" id="xfGame" hidden><span data-icon="info" data-size="18"></span><span>The game is running. Close it first, then make the new save.</span></div>
+      <fieldset class="field xf-side">
+        <legend class="field-label">Copy from</legend>
+        <div class="xf-pts" id="xfSourceList" role="radiogroup" aria-label="Copy from: pick a playthrough, then a save"></div>
+        <p class="xf-hint" id="xfSourceHint"></p>
+      </fieldset>
+      <fieldset class="field xf-side">
+        <legend class="field-label">Put it on</legend>
+        <div class="xf-pts" id="xfTargetList" role="radiogroup" aria-label="Put it on: pick a playthrough, then a save"></div>
+        <p class="xf-hint" id="xfTargetHint"></p>
+      </fieldset>
+      <fieldset class="field xf-field">
+        <legend class="field-label">Gender and voice</legend>
+        <div class="segmented">
+          <label><input type="radio" name="xfGender" value="keep" checked><span>Keep as it is</span></label>
+          <label><input type="radio" name="xfGender" value="female"><span>Female</span></label>
+          <label><input type="radio" name="xfGender" value="male"><span>Male</span></label>
+        </div>
+      </fieldset>
+      <fieldset class="field xf-checks">
+        <legend class="field-label">Also copy</legend>
+        <label class="check"><input type="checkbox" id="xfLook"><span class="xf-what"><b>Look</b><small>Face, hair, body shape and tattoos. The body type follows the save you copy from; the voice stays as it is.</small></span></label>
+        <label class="check"><input type="checkbox" id="xfClothes"><span class="xf-what"><b>Clothes</b><small>Every piece the other save has and this one doesn’t, mod clothes included.</small></span></label>
+        <label class="check"><input type="checkbox" id="xfOutfits"><span class="xf-what"><b>Outfits</b><small>Saved outfits from Equipment-EX. Copy the clothes with them.</small></span></label>
+        <label class="check"><input type="checkbox" id="xfGuns"><span class="xf-what"><b>Guns</b><small>Weapons the other save has and this one doesn’t.</small></span></label>
+      </fieldset>
+      <fieldset class="field xf-checks">
+        <legend class="field-label">Tidy up</legend>
+        <label class="check"><input type="checkbox" id="xfTidy"><span class="xf-what"><b>Remove piles of identical clothes</b><small>Cuts any clothing kind you hold more than 4 times down to 2. Nothing you are wearing or use in an outfit is removed.</small></span></label>
+      </fieldset>
+      <p class="xf-sum" id="xfSum" role="status" aria-live="polite"></p>
+      <button class="btn xf-check" id="xfCheck" type="button" hidden>Check what it would add (about 30 seconds)</button>
+    </div>
+    <div id="xfDone" class="xf-done" hidden>
+      <h3 class="xf-done-title" id="xfDoneTitle"></h3>
+      <p id="xfDoneText"></p>
+      <p class="xf-hint" id="xfDoneBackup"></p>
+    </div>
+  </div>
+  <footer class="sheet-foot">
+    <span class="spacer"></span>
+    <button class="btn" type="button" id="xfAgain" hidden>Make another</button>
+    <button class="btn" type="button" data-close id="xfCancel">Cancel</button>
+    <button class="btn btn-primary" id="xfRun" type="button" disabled>Make new save</button>
+  </footer>
+</section>
+
 <!-- Deleted mods (the in-app trash) -->
 <section id="trashSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="trTitle" hidden>
   <header class="sheet-head">

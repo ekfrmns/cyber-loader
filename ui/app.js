@@ -806,7 +806,9 @@ function renderProfileMenu() {
 function renderMoreMenu() {
   const item = (act, ic, label) =>
     `<button class="menu-item" type="button" role="menuitem" data-act="${act}" tabindex="-1">${icon(ic, 18)}<span class="label"><span>${esc(label)}</span></span></button>`;
-  $('#moreMenu').innerHTML = [item('history', 'restore', 'Setup history…'), item('trash', 'trash', 'Deleted mods…'), item('game', 'folder', 'Game folder…'), item('appearance', 'appearance', 'Appearance…')].join('');
+  $('#moreMenu').innerHTML = [item('history', 'restore', 'Setup history…'), item('trash', 'trash', 'Deleted mods…'),
+    ...(S.st?.saveTransfer ? [item('transfer', 'characters', 'Change or move a character…')] : []),
+    item('game', 'folder', 'Game folder…'), item('appearance', 'appearance', 'Appearance…')].join('');
 }
 
 // ---------- Game folder: see it, and change it (the engine refuses while mods are placed, the game runs, or an apply runs) ----------
@@ -905,6 +907,268 @@ async function gfSave() {
   } finally {
     gf.busy = false;
     if (isOpen($('#gameSheet'))) gfRender();
+  }
+}
+
+// ---------- Change or move a character between saves (optional add-on; the engine makes a NEW save and never changes the others) ----------
+const xf = { list: null, pts: [], pick: { source: null, target: null }, save: { source: {}, target: {} }, info: new Map(), pseq: 0, timer: null, busy: false, report: null, checking: false, error: '', since: 0, tick: null };
+const xfStamp = (sec) => new Date(sec * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const xfLabel = (s) => [s.id, s.bodyGender ? `${s.bodyGender.toLowerCase()} V` : '', s.level ? `level ${s.level}` : '',
+  s.hours != null ? `${s.hours} h` : '', s.savedAt ? xfStamp(s.savedAt) : ''].filter(Boolean).join(' · ');
+const xfSaveById = (id) => (xf.list || []).find((x) => x.id === id);
+const xfPt = (pid) => xf.pts.find((g) => g.id === pid);
+const xfChosen = (side) => xf.save[side][xf.pick[side]] || xfPt(xf.pick[side])?.saves[0] || '';
+const xfPtName = (g) => g.name || `Playthrough started ${new Date(g.first * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+const xfPtMeta = (g) => [plural(g.count, 'save'), g.bodies.length ? `${g.bodies.map((b) => b.toLowerCase()).join(' and ')} V` : '', g.level ? `level ${g.level}` : '',
+  g.hours != null ? `${g.hours} h` : '', `last played ${xfStamp(g.last)}`].filter(Boolean).join(' · ');
+const xfSaveText = (x, latest) => [x.label + (latest ? ' (latest)' : ''), x.bodyGender ? `${x.bodyGender.toLowerCase()} V` : '', x.hours != null ? `${x.hours} h` : '', x.savedAt ? xfStamp(x.savedAt) : ''].filter(Boolean).join(' · ');
+
+function xfRenderSide(side) {
+  const box = $(side === 'source' ? '#xfSourceList' : '#xfTargetList');
+  const name = `xfPt-${side}`;
+  box.innerHTML = xf.pts.map((g) => {
+    const on = g.id === xf.pick[side];
+    const chosen = xf.save[side][g.id] || g.saves[0];
+    const opts = g.saves.map((id, i) => { const x = xfSaveById(id); return `<option value="${esc(id)}" ${id === chosen ? 'selected' : ''}>${esc(xfSaveText(x, i === 0))}</option>`; }).join('');
+    return `<div class="xf-pt${on ? ' is-on' : ''}">
+      <label class="xf-pt-head"><input type="radio" name="${name}" value="${esc(g.id)}" ${on ? 'checked' : ''}>
+        <span class="xf-pt-main"><b>${esc(xfPtName(g))}</b><small>${esc(xfPtMeta(g))}</small></span></label>
+      <button class="btn btn-icon xf-rename" type="button" data-rename="${esc(g.id)}" aria-label="Rename “${esc(xfPtName(g))}”" title="Rename">${icon('pencil', 16)}</button>
+      ${on ? `<label class="xf-pt-save"><span>Save</span><select data-xf-save="${side}" aria-label="Save in ${esc(xfPtName(g))}">${opts}</select></label>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function xfRename(pid, trigger) {
+  const g = xfPt(pid);
+  if (!g) return;
+  const r = await dialog({ title: 'Name this playthrough', message: 'Only for you, to tell playthroughs apart. Your saves are not changed. Leave it empty to go back to the date.',
+    input: { label: 'Name', value: g.name || '' }, confirm: 'Save name', trigger });
+  if (!r) return;
+  try {
+    const res = await api.post('/api/savetransfer/name', { playthrough: pid, name: r.value });
+    g.name = res.name;
+    xfRenderSide('source'); xfRenderSide('target');
+  } catch (e) {
+    toast(e.message, { tone: 'error', timeout: 6000 });
+  }
+}
+
+const xfNeedsSource = (o) => o.look || o.clothes || o.outfits || o.guns;      // a gender change alone only uses the save it is put on
+const xfGet = () => {
+  const o = {
+    target: xfChosen('target'),
+    gender: $('#xfForm input[name="xfGender"]:checked')?.value || 'keep',
+    look: $('#xfLook').checked, clothes: $('#xfClothes').checked, outfits: $('#xfOutfits').checked, guns: $('#xfGuns').checked,
+    tidy: $('#xfTidy').checked,
+  };
+  o.source = xfNeedsSource(o) ? xfChosen('source') : null;
+  return o;
+};
+const xfPicked = (o) => o.gender !== 'keep' || o.look || o.clothes || o.outfits || o.guns || o.tidy;
+const xfJoin = (bits) => (bits.length > 1 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits[0] || '');
+
+function xfInfoText(id) {
+  const i = xf.info.get(id);
+  if (!id) return '';
+  if (!i) return 'Reading this save…';
+  if (i.error) return i.error;
+  const c = i.counts || {};
+  return [`${i.bodyGender || '?'} body, ${i.voice || '?'} voice`, plural(c.clothes ?? 0, 'clothing piece') + (c.modItems ? ` (+${nf.format(c.modItems)} mod items)` : ''),
+    plural(c.guns ?? 0, 'gun'), plural(c.outfits ?? 0, 'outfit')].join(' · ');
+}
+
+function xfSummary(o) {
+  const needs = xfNeedsSource(o);
+  if (!o.target || (needs && !o.source)) return { text: '', bad: false, ok: false };
+  if (needs && o.source === o.target) return { text: 'Pick two different saves.', bad: true, ok: false };
+  if (!xfPicked(o)) return { text: 'Tick at least one thing to move.', bad: false, ok: false };
+  if (xf.error) return { text: xf.error, bad: true, ok: false };
+  if (xf.checking) return { text: 'Checking what would change. This takes about half a minute.', bad: false, ok: false, busy: true };
+  const r = xf.report;
+  if (!r) {
+    // Instant description, no waiting: the exact numbers come from "Check what it would add" or from the result.
+    const bits = [];
+    if (o.gender !== 'keep') bits.push(`have V as ${o.gender} (voice too)`);
+    if (o.look) bits.push(`have the look from “${o.source}”`);
+    if (o.clothes) bits.push('get the clothes it doesn’t have yet');
+    if (o.guns) bits.push('get the guns it doesn’t have yet');
+    if (o.outfits) bits.push('get the outfits it doesn’t have yet');
+    if (o.tidy) bits.push('have piles of identical clothes cut down to 2 of each');
+    const stay = needs ? `“${o.source}” and “${o.target}” stay exactly as they are` : `“${o.target}” stays exactly as it is`;
+    return { text: `The new save will ${xfJoin(bits)}. ${stay}. Making it takes about a minute.`, bad: false, ok: true, canCheck: needs || o.tidy };
+  }
+  const bits = [];
+  if (o.gender !== 'keep') bits.push(`have V as ${o.gender} (voice too)`);
+  if (r.look) bits.push('have the look from “' + o.source + '”');
+  if (o.clothes) bits.push(r.clothesAdded ? `get ${plural(r.clothesAdded, 'piece')} of clothing` : 'get no clothes (it has them all)');
+  if (o.guns) bits.push(r.gunsAdded ? `get ${plural(r.gunsAdded, 'gun')}` : 'get no guns (it has them all)');
+  if (o.outfits) bits.push(r.outfitsAdded ? `get ${plural(r.outfitsAdded, 'outfit')}` : 'get no outfits');
+  if (o.tidy) bits.push(r.tidyRemoved ? `lose ${plural(r.tidyRemoved, 'surplus copy', 'surplus copies')} (${Object.entries(r.tidyKinds || {}).map(([n, c]) => `${c} × ${n}`).join(', ')})` : 'lose nothing (no piles to cut down)');
+  const something = o.gender !== 'keep' || r.look || r.clothesAdded || r.gunsAdded || r.outfitsAdded || r.tidyRemoved;
+  let text = something ? `The new save will ${xfJoin(bits)}. ${needs ? `“${o.source}” and “${o.target}” stay` : `“${o.target}” stays`} exactly as ${needs ? 'they are' : 'it is'}.`
+    : 'Nothing to add: that save already has everything you ticked.';
+  if (r.outfitsNote) text += ` ${r.outfitsNote}`;
+  if (r.outfitSetsSkipped) text += ` ${plural(r.outfitSetsSkipped, 'outfit')} with the same name ${r.outfitSetsSkipped === 1 ? 'was' : 'were'} skipped.`;
+  if (r.outfitPartsSkipped) text += ` ${plural(r.outfitPartsSkipped, 'outfit piece')} could not be matched to an item and ${r.outfitPartsSkipped === 1 ? 'was' : 'were'} left out.`;
+  return { text, bad: false, ok: !!something };
+}
+
+function xfRender() {
+  const o = xfGet();
+  $('#xfGame').hidden = !running();
+  const needs = xfNeedsSource(o);
+  const side = $('#xfSourceList').closest('fieldset');
+  side.classList.toggle('xf-off', !needs);
+  side.inert = !needs;
+  $('#xfSourceHint').textContent = needs ? xfInfoText(o.source) : 'Not needed: a gender change only uses the save you put it on.';
+  $('#xfTargetHint').textContent = xfInfoText(o.target);
+  const s = xfSummary(o);
+  const sum = $('#xfSum');
+  const working = xf.busy || !!s.busy;
+  const msg = xf.busy ? 'Making the new save. This can take a minute or two; keep this window open.' : s.text;
+  sum.classList.toggle('is-bad', !!s.bad && !xf.busy);
+  sum.classList.toggle('is-busy', working);
+  if (working) {
+    if (sum.dataset.busy !== msg) {
+      sum.dataset.busy = msg;
+      sum.innerHTML = `<span class="xf-spin" aria-hidden="true"></span><span>${esc(msg)} <span class="xf-elapsed" id="xfElapsed"></span></span>`;
+      xf.since = Date.now();
+      sum.scrollIntoView({ block: 'nearest', behavior: pref.reduceMotion ? 'auto' : 'smooth' });
+    }
+    if (!xf.tick) xf.tick = setInterval(xfTick, 1000);
+  } else {
+    delete sum.dataset.busy;
+    sum.textContent = s.text;
+    clearInterval(xf.tick); xf.tick = null;
+  }
+  $('#xfCheck').hidden = !(s.canCheck && !xf.busy);
+  $('#xfRun').disabled = xf.busy || xf.checking || running() || !s.ok;
+  $('#xfRun').innerHTML = xf.busy ? '<span class="xf-spin xf-spin-btn" aria-hidden="true"></span>Making the save…' : 'Make new save';
+  $('#xfForm').classList.toggle('xf-busy', xf.busy);
+  $('#xfForm').setAttribute('aria-busy', xf.busy ? 'true' : 'false');
+}
+
+function xfTick() {
+  const el = $('#xfElapsed');
+  if (el) el.textContent = `(${Math.round((Date.now() - xf.since) / 1000)} s)`;
+}
+
+async function xfInspect(id) {
+  if (!id || xf.info.has(id)) return;
+  try { xf.info.set(id, await api.post('/api/savetransfer/inspect', { save: id })); }
+  catch (e) { xf.info.set(id, { error: e.message }); }
+  if (isOpen($('#xferSheet'))) xfRender();
+}
+
+async function xfPreview() {
+  const o = xfGet();
+  const mine = ++xf.pseq;
+  if (!o.target || (xfNeedsSource(o) && (!o.source || o.source === o.target)) || !xfPicked(o) || xf.checking) return;
+  xf.checking = true;
+  xfRender();
+  try {
+    const r = await api.post('/api/savetransfer/preview', o);
+    xf.checking = false;
+    if (mine !== xf.pseq) { xfRender(); return; }     // the choices changed while this was being worked out: the answer no longer fits
+    xf.report = { ...r.report, look: !!r.report.look };
+  } catch (e) {
+    xf.checking = false;
+    if (mine === xf.pseq) xf.error = e.message;
+    xfRender();
+    return;
+  }
+  xfRender();
+}
+
+function xfChanged() {
+  xf.report = null;
+  xf.error = '';
+  xf.pseq++;
+  clearTimeout(xf.timer);
+  const o = xfGet();
+  if (o.source) xfInspect(o.source);
+  xfInspect(o.target);
+  xfRender();
+}
+
+function xfShowForm(on) {
+  if (!on) { clearInterval(xf.tick); xf.tick = null; }
+  $('#xfForm').hidden = !on;
+  $('#xfDone').hidden = on;
+  $('#xfRun').hidden = !on;
+  $('#xfAgain').hidden = on;
+  $('#xfCancel').textContent = on ? 'Cancel' : 'Close';
+  $('#xfSub').hidden = !on;
+}
+
+async function openTransfer(trigger) {
+  const v = await api.get('/api/savetransfer');
+  if (!v.available) { toast(v.reason || 'The save transfer add-on is not installed.', { tone: 'error', timeout: 6000 }); return; }
+  if (!v.saves.length) { toast(v.reason || 'No saves were found in the game’s saves folder.', { tone: 'error', timeout: 6000 }); return; }
+  xf.list = v.saves;
+  xf.pts = v.playthroughs;
+  xf.info = new Map();
+  xf.report = null;
+  xf.checking = false;
+  xf.busy = false;
+  xf.save = { source: {}, target: {} };
+  // First playthrough = the one played last. Put-it-on starts on the next playthrough if there is one.
+  xf.pick = { source: xf.pts[0].id, target: (xf.pts[1] || xf.pts[0]).id };
+  xf.save.target[xf.pick.target] = xf.pts[1] ? xf.pts[1].saves[0] : (xf.pts[0].saves[1] || xf.pts[0].saves[0]);
+  xfRenderSide('source'); xfRenderSide('target');
+  $('#xfForm input[name="xfGender"][value="keep"]').checked = true;
+  for (const id of ['#xfLook', '#xfClothes', '#xfOutfits', '#xfGuns', '#xfTidy']) $(id).checked = false;
+  xfShowForm(true);
+  xfRender();
+  openModal($('#xferSheet'), { trigger, initialFocus: '#xfSourceList input:checked' });
+  xfChanged();
+}
+
+async function xfAgain() {
+  // Back to the form with a fresh list, so the save that was just made is in it.
+  try {
+    const v = await api.get('/api/savetransfer');
+    if (v.available && v.saves.length) {
+      xf.list = v.saves; xf.pts = v.playthroughs;
+      for (const side of ['source', 'target']) if (!xfPt(xf.pick[side])) xf.pick[side] = xf.pts[0].id;
+    }
+  } catch { /* keep the list we have */ }
+  xf.info = new Map();
+  xfShowForm(true);
+  xfRenderSide('source'); xfRenderSide('target');
+  xfChanged();
+  $('#xfSourceList input:checked')?.focus();
+}
+
+async function xfRun() {
+  const o = xfGet();
+  if (xf.busy || !xfSummary(o).ok) return;
+  xf.busy = true;
+  clearTimeout(xf.timer);
+  xfRender();
+  try {
+    const r = await api.post('/api/savetransfer/run', o);
+    const rep = r.report || {};
+    const did = [];
+    if (rep.gender) did.push(`V is now ${rep.gender}`);
+    if (rep.look) did.push('the look was copied');
+    if (rep.clothesAdded) did.push(`${plural(rep.clothesAdded, 'piece')} of clothing added`);
+    if (rep.gunsAdded) did.push(`${plural(rep.gunsAdded, 'gun')} added`);
+    if (rep.outfitsAdded) did.push(`${plural(rep.outfitsAdded, 'outfit')} added`);
+    if (rep.tidyRemoved) did.push(`${plural(rep.tidyRemoved, 'surplus copy', 'surplus copies')} of identical clothes removed`);
+    $('#xfDoneTitle').textContent = `Your new save is “${r.slot}”`;
+    const pt = xfPt(r.playthrough);
+    $('#xfDoneText').textContent = `${did.length ? `${did[0][0].toUpperCase()}${did.join(', ').slice(1)}. ` : ''}In the game, open Load Game and pick “${r.slot}”. ${r.source ? `“${r.source}” and “${r.target}” were` : `“${r.target}” was`} not changed.${pt ? ` The new save is in “${xfPtName(pt)}”.` : ''}`;
+    $('#xfDoneBackup').textContent = `A backup copy of ${r.source ? 'both saves' : 'the save'} is kept in ${r.backup}`;
+    xfShowForm(false);
+    toast(`Made “${r.slot}”`, { tone: 'ok' });
+    $('#xfAgain').focus();
+  } catch (e) {
+    toast(e.message, { tone: 'error', timeout: 8000 });
+  } finally {
+    xf.busy = false;
+    if (isOpen($('#xferSheet')) && !$('#xfForm').hidden) xfRender();
   }
 }
 
@@ -1337,6 +1601,8 @@ async function runMenuAction(act, trigger) {
       await openHistory(trigger);
     } else if (act === 'trash') {
       await openTrash(trigger);
+    } else if (act === 'transfer') {
+      await openTransfer(trigger);
     } else if (act === 'game') {
       await openGameFolder(trigger);
     } else if (act === 'appearance') {
@@ -1500,6 +1766,23 @@ function wire() {
   $('#gfInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !$('#gfSave').disabled) { e.preventDefault(); gfSave(); } });
   $('#gfBrowse').addEventListener('click', gfBrowse);
   $('#gfSave').addEventListener('click', gfSave);
+  $('#xfForm').addEventListener('change', (e) => {
+    const t = e.target;
+    if (t.matches('.xf-pt-head input')) {
+      const side = t.name === 'xfPt-source' ? 'source' : 'target';
+      xf.pick[side] = t.value;
+      xfRenderSide(side);
+      $(`#${side === 'source' ? 'xfSourceList' : 'xfTargetList'} input:checked`)?.focus();
+    } else if (t.matches('select[data-xf-save]')) {
+      const side = t.dataset.xfSave;
+      xf.save[side][xf.pick[side]] = t.value;
+    }
+    xfChanged();
+  });
+  $('#xfForm').addEventListener('click', (e) => { const b = e.target.closest('[data-rename]'); if (b) xfRename(b.dataset.rename, b); });
+  $('#xfRun').addEventListener('click', xfRun);
+  $('#xfCheck').addEventListener('click', xfPreview);
+  $('#xfAgain').addEventListener('click', xfAgain);
   $('#historySheet').addEventListener('click', historyClick);
   $('#trashSheet').addEventListener('click', trashClick);
   $('#trEmpty').addEventListener('click', (e) => emptyTrash(e.currentTarget));

@@ -164,15 +164,15 @@ class DeployLink(Base):
 class Names(unittest.TestCase):
     def test_clean_name(self):
         self.assertEqual(clean_name("ArchiveXL 4198 1.28.8 2026-11-13T09-01Z UQrhQSmgd"), "ArchiveXL")
-        self.assertEqual(clean_name("NPC LoD Tweak (for PT)-19926-1-0-1740331462"), "NPC LoD Tweak (for PT)")
-        self.assertEqual(clean_name("CET 1.38.1 - Game version 2.5 107 1.38.1 2026-10-26T01-28Z ozVyzbb0n"),
-                         "CET 1.38.1 - Game version 2.5")
+        self.assertEqual(clean_name("Sample Tweak (for X)-11111-1-0-1740331462"), "Sample Tweak (for X)")
+        self.assertEqual(clean_name("Script Core 1.38.1 - Game version 2.5 222 1.38.1 2026-10-26T01-28Z ozVyzbb0n"),
+                         "Script Core 1.38.1 - Game version 2.5")
         self.assertEqual(clean_name("Codeware 0.2.1"), "Codeware 0.2.1")
 
     def test_groups(self):
         self.assertEqual(guess_group("Codeware"), "Framework")
         self.assertEqual(guess_group("Codeware 0.2.1"), "Framework")
-        self.assertEqual(guess_group("Thigh High Boots Latex - Archive XL"), "Clothing")
+        self.assertEqual(guess_group("Sample Boots - Archive XL"), "Clothing")
         self.assertEqual(guess_group("Sample Character FOMOD"), "Characters")
 
 

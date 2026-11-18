@@ -2,6 +2,17 @@
 
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = changes that need your data migrated.
 
+## 1.6.0 - 2026-11-17
+Change or move a character between Cyberpunk 2077 saves (optional add-on).
+- **Change or move a character…** ("..." menu, only shown when the add-on is installed). Pick a save to copy from and a save to put it on, then choose what moves: gender and voice, the look (face, hair, body shape, tattoos), clothes, Equipment-EX outfits and guns. Or just change the gender, which needs no save to copy from (this is also how to turn a character back).
+- **Saves are shown by playthrough.** The game files saves under a playthrough. Each one is a card with its save count, which bodies it holds, level, hours and when it was last played, with a drop-down of its saves (newest first, the latest marked). Saves are named plainly ("Manual save 34", "Autosave 1"). The pencil on a card lets you give a playthrough a name of your own (kept in `<data>\save-names.json`).
+- **It always makes a new save.** Your saves are never changed: the result goes into the game's saves folder as the next free `ManualSave-<number>`, after the saves involved were copied to `<data>\save-backups\<time>\`. Refused while the game or an apply is running. The result is read back and checked before it is put in place. The new save stays in the playthrough of the save it was put on.
+- **Short, visible waits.** The summary under the options is instant. The exact numbers ("get 26 pieces of clothing") come from a "Check what it would add" button (about 30 seconds). Making the save takes about 25 to 40 seconds and shows a spinner and a seconds counter. What a save contains is remembered until the save file changes.
+- **Tidy up** option: cuts piles of identical clothes (more than 4 of a kind) down to 2 of each, keeping anything you wear or use in an outfit. Some mods can create such piles, which add weight.
+- **The add-on** (`addons\savetool`, installed with `tools\build-savetool.ps1`) is built on the MIT-licensed CP2077SaveEditor / CyberCAT-SimpleGUI by Deweh and contributors, which you download yourself. It needs the .NET 10 Desktop Runtime. A normal install does not have it and does not show the menu entry. Details: `docs\SAVE-TRANSFER.md`.
+- Outfits need the target save to have run at least once with Equipment-EX; if not, the summary says so instead of failing. Reading a save takes the add-on about 15 seconds and two cannot be read at once, so a transfer reads them one after the other.
+- API (additive, see `docs/API.md`): `GET /api/savetransfer` (with `playthroughs`, and a `kind` and `label` per save), `POST /api/savetransfer/inspect`, `/name`, `/preview` and `/run`; `/api/state` has `saveTransfer`. Nothing was removed or changed.
+
 ## 1.5.0 - 2026-11-17
 A Game folder screen, so you can change which Cyberpunk folder the app uses without running Setup again.
 - **Game folder screen** ("..." menu). Shows the folder in use and its game version. Type or paste a path (the game's folder or its `Cyberpunk2077.exe` both work) and it checks that it really is Cyberpunk 2077 before saving. **Browse…** opens a folder dialog (needs this version's window host).

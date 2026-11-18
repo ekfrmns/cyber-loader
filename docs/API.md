@@ -138,6 +138,42 @@ If the contract needs to change, the UI session writes the request to `docs/API-
          relative to it), 409 the game is running, 409 the folder was given on the command line (`--game`, MODMAN_GAME) or there is
          no `cyberloader.json`, 423 an apply is running, 500 the settings file could not be saved.
 
+    Save transfer (optional add-on, see docs/SAVE-TRANSFER.md). `/api/state` has `saveTransfer: boolean` = the add-on is installed
+    (the UI only shows "Change or move a character…" when true).
+    GET  /api/savetransfer      -> { available: boolean, reason: string|null,     // when !available: plain words why
+                                     savesDir: string, gameRunning: boolean,
+                                     playthroughs: [{ id,      // the game files saves under a playthrough id; most recently played first
+                                                       name,        // a name the user gave it (see /name), or null
+                                                       count, first, last,   // number of saves; unix seconds of the oldest and newest
+                                                       bodies,      // e.g. ["Female","Male"]: the body genders found in its saves
+                                                       level, hours,         // of its newest save / most hours seen; may be null
+                                                       saves }],    // the ids of its saves, newest first
+                                     saves: [{ id,            // the save's folder name, e.g. "ManualSave-8"; this is what the other calls take
+                                               kind, label,         // "manual"|"auto"|"quick"|"other"; "Manual save 8", "Autosave 1"...
+                                               bodyGender, voice,   // "Male"|"Female"|null (read from the save's metadata)
+                                               level, hours, lifePath, modded, playthrough, patch,   // each may be null
+                                               savedAt,       // unix seconds
+                                               hasPicture }] }  // newest first
+    POST /api/savetransfer/name { playthrough, name }          -> { ok, id, name }
+         Names a playthrough (whitespace tidied, 60 characters at most; an empty name clears it). Kept in `<data>\save-names.json`;
+         no save is touched. 404 unknown playthrough, 500 not saved.
+    POST /api/savetransfer/inspect { save }                   -> { id, bodyGender, voice, counts: { clothes, modItems, guns, outfits } }
+         Opens the save with the add-on (a few seconds). `modItems` = items the add-on cannot name (mod clothes).
+    POST /api/savetransfer/preview { source?, target, gender?, look?, clothes?, outfits?, guns?, tidy? }
+                                                              -> { ok, report: { look?, gender?, clothesAdded?, gunsAdded?, outfitsAdded?,
+                                                                                 outfitSetsSkipped?, outfitPartsSkipped?, outfitsNote? } }
+         `gender` is "keep" (default), "female" or "male" (body and voice); the others are booleans. `tidy` (boolean) cuts every clothing kind held more than 4 times down to 2, keeping anything equipped or used by an
+         Equipment-EX outfit first (report: `tidyRemoved`, `tidyKinds` = { name: removed }). `source` is only needed when
+         look, clothes, outfits or guns is ticked (not for gender or tidy); a gender change alone uses just `target` (a `source` sent with it is ignored). Changes nothing: it only counts
+         what a real run would add. `outfitsNote` explains why outfits cannot be added (for example the target has never run with the mod).
+    POST /api/savetransfer/run  { same body as preview }      -> { ok, slot, report, result: { bodyGender, voice, counts }, backup, source (null for a gender change alone), target, playthrough }
+         Copies what was ticked from `source` (or just changes gender) onto a copy of `target` and puts the result into the saves folder as a NEW slot
+         (`slot`, "ManualSave-<highest number + 1>"); it stays in the target's playthrough (`playthrough`). Before anything is made, both saves are copied to `backup`
+         (`<data>\save-backups\<time>\`). No existing save is changed, moved or deleted. Synchronous (several seconds).
+         Errors, everything left as it was: 400 nothing ticked / same save / bad name or gender, 404 save not found, 409 the add-on is not
+         installed or refused (its message is passed on), 409 the game is running, 423 an apply is running, 500 the add-on failed or
+         produced no usable save, 504 the add-on took too long.
+
     GET  /api/settings          -> { theme: "system"|"light"|"dark", accent: "#rrggbb" }
     POST /api/settings          { theme?, accent? }       -> same shape
 

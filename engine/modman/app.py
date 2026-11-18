@@ -11,6 +11,7 @@ from .deploy import (Entry, Plan, State, _identical, _stat, apply_plan, build_de
                      intact, make_plan, preflight)
 from .library import GROUPS, Library, clean_name, normalize_root
 from .profiles import Profiles
+from .savetransfer import SaveTransfer, TransferError
 from .snapshots import Snapshots, describe, parse_origin, pretty_version
 from .util import key, read_json, write_json
 
@@ -32,6 +33,7 @@ class App:
         self.profiles = Profiles(cfg.profiles_dir, cfg.state_dir / "session.json")
         self.state = State(cfg.state_dir / "deployed.json")
         self.snapshots = Snapshots(cfg.snapshots_dir)
+        self.savetransfer = SaveTransfer(cfg)
         if not self.profiles.names():       # first run: start with one empty profile (= the plain game)
             self.profiles.save("Empty", [])
             self.profiles.set_current("Empty")
@@ -74,7 +76,7 @@ class App:
             return {"game": {"running": game_running(), "found": self.cfg.game_found, **self.cfg.game_info()}, "profile": self.current,
                     "profiles": self.profiles.names(), "deployedCount": len(self.state.files),
                     "pendingCount": {"on": on, "off": off}, "profileDirty": self._profile_dirty(),
-                    "version": __version__, "mods": mods}
+                    "version": __version__, "saveTransfer": self.savetransfer.available()[0], "mods": mods}
 
     @staticmethod
     def _mod_view(m, enabled: set, deployed: set, cc: dict, auto=None, others=None) -> dict:
@@ -483,6 +485,28 @@ class App:
                 except OSError:
                     pass        # the folder is already changed; these records are only tidiness, so do not report a failure
             return {"ok": True, "changed": True, **self.game_folder()}
+
+    # ------------------------------------------------------------ save transfer (optional add-on)
+    def savetransfer_view(self) -> dict:
+        return self.savetransfer.list_view()
+
+    def savetransfer_call(self, what: str, body: dict) -> dict:
+        """what: inspect | name | preview | run. Errors from the add-on layer become API errors with a plain message."""
+        try:
+            if what == "inspect":
+                return self.savetransfer.inspect(str(body.get("save") or ""))
+            if what == "name":
+                return self.savetransfer.set_name(body.get("playthrough"), body.get("name"))
+            if what == "preview":
+                return self.savetransfer.preview(body)
+            if what == "run":
+                with self.lock:
+                    if self.job["state"] == "running":
+                        raise ApiError(423, "An apply is running. Wait for it to finish first.")
+                return self.savetransfer.run(body)
+        except TransferError as ex:
+            raise ApiError(ex.code, ex.message)
+        raise ApiError(404, "unknown endpoint")
 
     # ------------------------------------------------------------ import
     def import_path(self, path: str, name: str | None = None) -> dict:

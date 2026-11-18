@@ -25,12 +25,12 @@ def write(p: Path, text="x"):
 
 class GuessTest(unittest.TestCase):
     def test_new_keywords(self):
-        for name, group in [("flower tattoo KSUV (female)", "Body"), ("Snake Tattoo (VTK)", "Body"), ("Sedth_Teeth_and_Braces_CCXL", "Body"),
-                            ("Grillz pack", "Body"), ("Skin tone pack", "Body"), ("1. UV Framework 4.1", "Framework"), ("UV Framework", "Framework")]:
+        for name, group in [("sample tattoo pack (female)", "Body"), ("Sample Tattoo (XYZ)", "Body"), ("Sample_Teeth_and_Braces_CCXL", "Body"),
+                            ("Grillz pack", "Body"), ("Skin tone pack", "Body"), ("UV Framework 4.1", "Framework"), ("UV Framework", "Framework")]:
             self.assertEqual(guess_group(name), group, name)
 
     def test_old_guesses_still_hold(self):
-        for name, group in [("RED4ext", "Framework"), ("Chic Dress - Archive XL", "Clothing"), ("Valentino Holsters - Main File", "Clothing"),
+        for name, group in [("RED4ext", "Framework"), ("Sample Dress - Archive XL", "Clothing"), ("Sample Holsters - Main File", "Clothing"),
                             ("Better Vehicle Handling", "Gameplay"), ("Some Totally Unknown Mod", "Other"), ("Skinwalker Quest", "Content")]:
             self.assertEqual(guess_group(name), group, name)
 

@@ -305,6 +305,7 @@ function state() {
     profileDirty: current ? !sameSet(enabled, profiles.get(current)) : false,
     deployedCount: [...deployed].reduce((a, id) => a + (byId.get(id)?.files || 0), 0),
     pendingCount: { on: v.filter((m) => m.pending === 'on').length, off: v.filter((m) => m.pending === 'off').length },
+    saveTransfer: !q.has('nosave'),
     mods: v,
   };
 }
@@ -339,6 +340,46 @@ function progress() {
 }
 
 const delay = () => new Promise((r) => setTimeout(r, (80 + Math.random() * 120) * SLOW));
+// Save transfer (invented saves; ?nosave=1 hides the feature like an install without the add-on)
+const SAVES = [
+  { id: 'ManualSave-14', kind: 'manual', label: 'Manual save 14', bodyGender: 'Female', voice: 'Female', level: 15, hours: 2.2, lifePath: 'StreetKid', modded: true, playthrough: 'b', savedAt: 1794000000, patch: '2.5', hasPicture: true, counts: { clothes: 41, modItems: 26, guns: 15, outfits: 4 } },
+  { id: 'AutoSave-9', kind: 'auto', label: 'Autosave 9', bodyGender: 'Female', voice: 'Female', level: 15, hours: 1.9, lifePath: 'StreetKid', modded: true, playthrough: 'b', savedAt: 1793990000, patch: '2.5', hasPicture: true, counts: { clothes: 41, modItems: 26, guns: 14, outfits: 4 } },
+  { id: 'ManualSave-6', kind: 'manual', label: 'Manual save 6', bodyGender: 'Male', voice: 'Male', level: 15, hours: 8.0, lifePath: 'Nomad', modded: false, playthrough: 'a', savedAt: 1793900000, patch: '2.5', hasPicture: true, counts: { clothes: 41, modItems: 0, guns: 32, outfits: 0 } },
+  { id: 'AutoSave-3', kind: 'auto', label: 'Autosave 3', bodyGender: 'Male', voice: 'Male', level: 12, hours: 6.4, lifePath: 'Nomad', modded: false, playthrough: 'a', savedAt: 1793800000, patch: '2.5', hasPicture: true, counts: { clothes: 38, modItems: 0, guns: 28, outfits: 0 } },
+];
+const PT_NAMES = {};
+function playthroughs() {
+  const groups = new Map();
+  for (const x of [...SAVES].sort((m, n) => n.savedAt - m.savedAt)) { if (!groups.has(x.playthrough)) groups.set(x.playthrough, []); groups.get(x.playthrough).push(x); }
+  return [...groups].map(([id, items]) => ({
+    id, name: PT_NAMES[id] || null, count: items.length, first: Math.min(...items.map((x) => x.savedAt)), last: Math.max(...items.map((x) => x.savedAt)),
+    bodies: [...new Set(items.map((x) => x.bodyGender))].sort(), level: items[0].level, hours: Math.max(...items.map((x) => x.hours)), saves: items.map((x) => x.id),
+  })).sort((m, n) => n.last - m.last);
+}
+function xferReport(b) {
+  const from = SAVES.find((x) => x.id === b.source) || { counts: { clothes: 0, modItems: 0, guns: 0, outfits: 0 } }, to = SAVES.find((x) => x.id === b.target);
+  const r = {};
+  if (b.look) r.look = true;
+  if (b.gender && b.gender !== 'keep') r.gender = b.gender;
+  if (b.clothes) r.clothesAdded = Math.max(0, from.counts.clothes + from.counts.modItems - to.counts.clothes);
+  if (b.guns) r.gunsAdded = Math.max(0, from.counts.guns - to.counts.guns);
+  if (b.tidy) { r.tidyRemoved = to.counts.clothes > 50 ? 72 : 0; r.tidyKinds = r.tidyRemoved ? { 'V’s street outfit': 72 } : {}; }
+  if (b.outfits) {
+    r.outfitsAdded = to.counts.outfits || to.modded ? from.counts.outfits : 0;
+    r.outfitSetsSkipped = 0; r.outfitPartsSkipped = 0;
+    if (!to.modded) r.outfitsNote = 'The target save has no Equipment-EX outfit data yet. Load it once in the game with your mods on, save, then transfer the outfits.';
+  }
+  return r;
+}
+function xferCheck(b) {
+  const bad = (m) => err(400, m);
+  const copies = b.look || b.clothes || b.outfits || b.guns;
+  if (!(copies || b.tidy || (b.gender && b.gender !== 'keep'))) return bad('Tick at least one thing to transfer.');
+  if ((copies && !SAVES.some((x) => x.id === b.source)) || !SAVES.some((x) => x.id === b.target)) return bad('Pick a save from the list.');
+  if (copies && b.source === b.target) return bad('The two saves have to be different.');
+  return null;
+}
+
 const ok = (json) => ({ status: 200, json });
 const err = (status, error) => ({ status, json: { error } });
 
@@ -499,6 +540,35 @@ export async function handle(method, url, body = {}) {
     case 'GET /api/progress':
       return ok(progress());
 
+
+    case 'GET /api/savetransfer':
+      return ok({ available: true, reason: null, savesDir: '(sample saves)', gameRunning: running, playthroughs: playthroughs(), saves: [...SAVES].sort((m, n) => n.savedAt - m.savedAt).map(({ counts, ...x }) => x) });
+    case 'POST /api/savetransfer/inspect': {
+      const x = SAVES.find((v) => v.id === body.save);
+      return x ? ok({ id: x.id, bodyGender: x.bodyGender, voice: x.voice, counts: x.counts }) : err(404, 'Can’t find that save.');
+    }
+    case 'POST /api/savetransfer/name': {
+      if (!playthroughs().some((g) => g.id === body.playthrough)) return err(404, 'Can’t find that playthrough.');
+      const text = String(body.name || '').split(/\s+/).join(' ').trim().slice(0, 60);
+      if (text) PT_NAMES[body.playthrough] = text; else delete PT_NAMES[body.playthrough];
+      return ok({ ok: true, id: body.playthrough, name: text || null });
+    }
+    case 'POST /api/savetransfer/preview': {
+      await new Promise((r) => setTimeout(r, +q.get('xferDelay') || 0));   // ?xferDelay=8000 to see the waiting state
+      const bad = xferCheck(body);
+      return bad || ok({ ok: true, report: xferReport(body) });
+    }
+    case 'POST /api/savetransfer/run': {
+      await new Promise((r) => setTimeout(r, +q.get('xferDelay') || 0));
+      const bad = xferCheck(body);
+      if (bad) return bad;
+      if (running) return err(409, 'The game is running. Close it first (a running game can overwrite saves).');
+      const slot = `ManualSave-${Math.max(...SAVES.map((x) => +(/(\d+)$/.exec(x.id)?.[1] || 0))) + 1}`;
+      const report = xferReport(body);
+      const to = SAVES.find((x) => x.id === body.target);
+      SAVES.unshift({ ...to, id: slot, kind: 'manual', label: `Manual save ${slot.split('-')[1]}`, savedAt: Math.floor(Date.now() / 1000), bodyGender: body.gender === 'male' ? 'Male' : body.gender === 'female' ? 'Female' : to.bodyGender, counts: { ...to.counts } });
+      return ok({ ok: true, slot, report, result: {}, backup: '(sample backup folder)', source: body.source || null, target: body.target, playthrough: to.playthrough });
+    }
 
     case 'GET /api/game-folder':
       return ok(gameFolder());

@@ -866,3 +866,55 @@ button.chip:hover { background: var(--fill-1); }
   .switch[aria-checked="true"] { background: Highlight; }
   .row:has(.switch:focus-visible) { outline: 2px solid Highlight; }
 }
+
+/* Move a character between saves */
+.input-field select {
+  width: 100%; height: 44px; padding: 0 12px; border-radius: var(--r-md);
+  border: 1px solid var(--separator); background: var(--card); color: var(--text); font-size: 14px; outline: none;
+}
+.input-field select:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; border-color: transparent; }
+.xf-hint { margin: 6px 2px 0; min-height: 1.4em; font-size: 12.5px; line-height: 1.45; color: var(--text-3); overflow-wrap: anywhere; }
+.xf-field { margin-top: 18px; }
+.xf-checks .check { margin-top: 0; padding: 8px 0; align-items: flex-start; min-height: 44px; }
+.xf-checks .check input { margin-top: 2px; }
+.xf-what b { display: block; font-weight: 600; }
+.xf-what small { display: block; margin-top: 2px; color: var(--text-2); font-size: 12.5px; line-height: 1.45; }
+.xf-sum { margin: 0; padding: 12px 14px; min-height: 3.2em; border-radius: var(--r-md); background: var(--fill-1); color: var(--text-2); font-size: 13.5px; line-height: 1.5; }
+.xf-sum.is-bad { color: var(--text); background: var(--warn-bg); }
+.xf-done { padding: 18px 16px; border-radius: var(--r-md); background: var(--card); box-shadow: var(--card-shadow); }
+.xf-done-title { margin: 0 0 8px; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.xf-done p { margin: 0 0 8px; font-size: 14px; line-height: 1.55; color: var(--text-2); }
+.xf-done .xf-hint { color: var(--text-3); }
+.xf-busy { opacity: .6; pointer-events: none; }
+
+/* Move a character: playthrough cards */
+.xf-side { margin: 18px 0 0; }
+.xf-side .field-label { margin-bottom: 8px; }
+.xf-pts { display: grid; gap: 8px; }
+.xf-pt { position: relative; border-radius: var(--r-md); background: var(--card); box-shadow: var(--card-shadow); }
+.xf-pt.is-on { box-shadow: 0 0 0 2px var(--accent); }
+.xf-pt-head { display: flex; align-items: flex-start; gap: 10px; padding: 12px 52px 12px 12px; min-height: 44px; cursor: pointer; }
+.xf-pt-head input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent-fill); flex: none; }
+.xf-pt-main b { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.xf-pt-main small { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.xf-rename { position: absolute; top: 4px; right: 4px; }
+.xf-pt-save { display: block; padding: 0 12px 12px 40px; }
+.xf-pt-save > span { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 6px 2px; }
+.xf-pt-save select {
+  width: 100%; height: 44px; padding: 0 12px; border-radius: var(--r-md);
+  border: 1px solid var(--separator); background: var(--bg, var(--card)); color: var(--text); font-size: 13.5px; outline: none;
+}
+.xf-pt-save select:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; border-color: transparent; }
+.xf-pt:has(input:focus-visible) { box-shadow: 0 0 0 2px var(--ring); }
+.xf-side.xf-off .xf-pts { opacity: .4; }
+.xf-side.xf-off .field-label { color: var(--text-3); }
+
+/* Move a character: it must look alive while the add-on works (a minute or two) */
+.xf-sum.is-busy { display: flex; align-items: flex-start; gap: 10px; }
+.xf-spin { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 22%, transparent); border-top-color: var(--accent); animation: xf-rot .8s linear infinite; }
+.xf-spin-btn { display: inline-block; margin: 0 8px -3px 0; border-top-color: currentColor; }
+.xf-elapsed { color: var(--text-3); font-variant-numeric: tabular-nums; }
+@keyframes xf-rot { to { transform: rotate(360deg); } }
+@keyframes xf-pulse { 50% { opacity: .35; } }
+:root[data-reduce-motion] .xf-spin { animation: xf-pulse 1.6s ease-in-out infinite; border-top-color: var(--accent); }
+.xf-check { margin-top: 10px; }
