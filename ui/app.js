@@ -296,11 +296,17 @@ function setupRail() {
   document.querySelectorAll('.rn[data-page]').forEach((el, i) => {
     const [t, sub] = PAGE_TIPS[el.dataset.page];
     const tip = document.createElement('span');
-    tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); tip.id = `tip${i}`;
+    tip.className = 'rtip'; tip.setAttribute('role', 'tooltip'); tip.id = `tip${i}`;
     tip.innerHTML = `<b>${esc(t)}</b><span>${esc(sub)}</span>`;
-    el.appendChild(tip);
+    document.body.appendChild(tip);   // outside the side bar: a tooltip inside it made the bar scroll sideways and got clipped
     el.setAttribute('aria-describedby', tip.id);
-    el.addEventListener('click', () => showPage(el.dataset.page, el));
+    const place = () => { const r = el.getBoundingClientRect(); tip.style.left = `${Math.round(r.right + 14)}px`; tip.style.top = `${Math.round(r.top + r.height / 2)}px`; };
+    const hide = () => tip.classList.remove('on', 'wait');
+    el.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'mouse') return; place(); tip.classList.add('wait'); tip.classList.add('on'); });
+    el.addEventListener('pointerleave', hide);
+    el.addEventListener('focus', () => { if (el.matches(':focus-visible')) { place(); tip.classList.remove('wait'); tip.classList.add('on'); } });
+    el.addEventListener('blur', hide);
+    el.addEventListener('click', () => { hide(); showPage(el.dataset.page, el); });
   });
   addEventListener('resize', movePills);
 }
