@@ -11,7 +11,7 @@
   (function () {
     var r = document.documentElement, s = {};
     try { s = JSON.parse(localStorage.getItem('cmm.settings') || '{}') || {}; } catch (e) {}
-    var t = s.theme || 'system';
+    var t = s.theme || 'dark';
     var dark = t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
     r.dataset.theme = dark ? 'dark' : 'light';
     if (/^#[0-9a-f]{6}$/i.test(s.accent || '')) r.style.setProperty('--accent', s.accent);
@@ -232,6 +232,13 @@
       <fieldset class="field xf-checks">
         <legend class="field-label">Tidy up</legend>
         <label class="check"><input type="checkbox" id="xfTidy"><span class="xf-what"><b>Remove piles of identical clothes</b><small>Cuts any clothing kind you hold more than 4 times down to 2. Nothing you are wearing or use in an outfit is removed.</small></span></label>
+        <label class="check"><input type="checkbox" id="xfStrip"><span class="xf-what"><b>Remove mod items (to play without mods)</b><small>Takes out the clothes and other items the plain game does not know, and clears the saved Equipment-EX outfits. Use it on a copy you want to play with the Empty profile.</small></span></label>
+      </fieldset>
+      <fieldset class="field xf-money">
+        <legend class="field-label">Money</legend>
+        <label class="input-field xf-money-field"><span id="xfMoneyLabel">Set money to (leave empty to keep it)</span>
+          <input id="xfMoney" type="text" inputmode="numeric" autocomplete="off" placeholder="for example 25000" aria-describedby="xfMoneyHint"></label>
+        <p class="xf-hint" id="xfMoneyHint"></p>
       </fieldset>
       <p class="xf-sum" id="xfSum" role="status" aria-live="polite"></p>
       <button class="btn xf-check" id="xfCheck" type="button" hidden>Check what it would add (about 30 seconds)</button>

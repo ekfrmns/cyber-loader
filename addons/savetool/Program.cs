@@ -3,7 +3,7 @@
 //
 //   savetool inspect  <save dir or sav.dat>
 //   savetool transfer [--source <save>] --target <save> --out <new folder>   (--source is only needed for look/clothes/outfits/guns)
-//                     [--gender keep|female|male] [--look] [--clothes] [--outfits] [--guns] [--tidy] [--dry-run]
+//                     [--gender keep|female|male] [--look] [--clothes] [--outfits] [--guns] [--tidy] [--strip-mods] [--money N] [--dry-run]
 //
 // Environment: CP2077_EDITOR_DIR = folder with the unzipped CP2077SaveEditor (its DLLs are loaded at run time).
 using System.Reflection;
@@ -68,6 +68,12 @@ static class P
         return new SaveFileHelper { SaveFile = save };
     }
 
+    // The money item is found by its fixed id (hash of "Items.money"), not by its text name, which is not always known.
+    // (computed on first use: a static field would load the editor DLLs before Main has told .NET where they are)
+    static ulong? _moneyId;
+    static ulong MoneyId() => _moneyId ??= (ulong)(TweakDBID)"Items.money";
+    static bool IsMoney(ItemData i) => (ulong)i.ItemInfo.ItemId.Id == MoneyId();
+
     static string TypeOf(ItemData it) =>
         ResourceHelper.ItemClasses.TryGetValue(it.ItemInfo.ItemId.Id, out var r) ? r.Type : "Unknown";
     static bool IsClothes(ItemData it) { var t = TypeOf(it); return t == "Clothing" || t == "Unknown"; }
@@ -85,7 +91,8 @@ static class P
             clothes = items.Count(i => TypeOf(i) == "Clothing"),
             modItems = items.Count(i => TypeOf(i) == "Unknown"),
             guns = items.Count(IsGun),
-            outfits = outfits?.Count ?? 0
+            outfits = outfits?.Count ?? 0,
+            money = (long)(items.FirstOrDefault(IsMoney)?.Quantity ?? 0)
         };
     }
 
@@ -119,8 +126,15 @@ static class P
     {
         var srcPath = Opt(a, "--source"); var dstPath = Opt(a, "--target"); var outDir = Opt(a, "--out");
         var gender = (Opt(a, "--gender", "keep") ?? "keep").ToLowerInvariant();
+        var moneyArg = Opt(a, "--money");
+        uint? newMoney = null;
+        if (moneyArg != null)
+        {
+            if (!uint.TryParse(moneyArg, out var mv) || mv > 2_000_000_000u) return Fail("--money must be a whole number from 0 to 2,000,000,000");
+            newMoney = mv;
+        }
         bool look = a.Contains("--look"), clothes = a.Contains("--clothes"), outfits = a.Contains("--outfits"),
-             guns = a.Contains("--guns"), tidy = a.Contains("--tidy"), dry = a.Contains("--dry-run");
+             guns = a.Contains("--guns"), tidy = a.Contains("--tidy"), strip = a.Contains("--strip-mods"), dry = a.Contains("--dry-run");
         if (dstPath == null) return Fail("--target is required");
         if (srcPath == null && (look || clothes || outfits || guns)) return Fail("--source is required to copy a look, clothes, outfits or guns");
         if (!dry && outDir == null) return Fail("--out is required");
@@ -228,6 +242,26 @@ static class P
                 report["outfitsNote"] = "The source save has no Equipment-EX outfits.";
         }
 
+        // 5a) make the save safe to load without mods: take out the items the plain game does not know, and the saved outfits
+        if (strip)
+        {
+            var sr = StripMods(dst, dry);
+            report["modItemsRemoved"] = sr.removed;
+            report["modItemKinds"] = sr.kinds;
+            report["modSlotsUnequipped"] = sr.unequipped;
+            report["outfitsCleared"] = sr.outfits;
+        }
+
+        // 5b) set the money (Eurodollars) to an exact amount
+        if (newMoney.HasValue)
+        {
+            var mi = dstInv.Items.FirstOrDefault(IsMoney);
+            if (mi == null) throw new Exception("This save has no money item to change");
+            report["moneyBefore"] = (long)mi.Quantity;
+            report["moneyAfter"] = (long)newMoney.Value;
+            if (!dry) mi.Quantity = newMoney.Value;
+        }
+
         // 5) cut piles of identical clothes down to a few (never anything worn or used by an outfit)
         if (tidy)
         {
@@ -311,6 +345,40 @@ static class P
             kinds[name] = (kinds.TryGetValue(name, out var c) ? c : 0) + (items.Count - keep.Count);
         }
         return (removed, kinds);
+    }
+
+    // Items the plain game does not know (type "Unknown": clothes and other items that come from mods) are removed from every
+    // container; anything equipped from that set is unequipped first so no slot points at a missing item; the Equipment-EX
+    // outfits and the active outfit parts are cleared. The save keeps its other mod data (scripts, settings) as it is.
+    static (int removed, int kinds, int unequipped, int outfits) StripMods(SaveFileHelper h, bool dry)
+    {
+        var inventories = h.GetInventoriesContainer().SubInventories;
+        var doomed = new List<(SubInventory inv, ItemData item)>();
+        foreach (var inv in inventories)
+            foreach (var it in inv.Items)
+                if (TypeOf(it) == "Unknown" && !IsMoney(it)) doomed.Add((inv, it));
+        int unequipped = 0;
+        foreach (var d in doomed)
+        {
+            foreach (var slot in h.GetEquipSlotsFromID(d.item.ItemInfo.ItemId))
+            {
+                if (!dry) slot.ItemID = new gameItemID();
+                unequipped++;
+            }
+        }
+        if (!dry) foreach (var d in doomed) d.inv.Items.Remove(d.item);
+        int outfits = 0;
+        var eex = h.GetScriptableSystem<OutfitSystem>()?.State?.Chunk;
+        if (eex != null)
+        {
+            outfits = eex.Outfits?.Count ?? 0;
+            if (!dry)
+            {
+                eex.Outfits = new CArray<CHandle<OutfitSet>>();
+                eex.Parts = new CArray<CHandle<OutfitPart>>();
+            }
+        }
+        return (doomed.Count, doomed.Select(d => (ulong)d.item.ItemInfo.ItemId.Id).Distinct().Count(), unequipped, outfits);
     }
 
     static void SetBodyGender(SaveFileHelper h, bool male)

@@ -6,8 +6,15 @@ import zlib
 from pathlib import Path
 
 
-def draw(size: int) -> bytes:
-    """RGBA pixels: a rounded square with a blue-to-violet gradient and three stacked 'mod layer' bars."""
+# Square: top-left to bottom-right gradient; bars: the colour the three bars fade to. Chosen to match the app's dark and red look.
+A0 = (86, 26, 44)     # dark with a red tint in the top-left corner, like the app's background glow
+A1 = (24, 22, 28)     # near-black bottom-right
+BAR = (255, 23, 69)   # #ff1745
+
+
+def draw(size: int, a0=None, a1=None, bar=None) -> bytes:
+    """RGBA pixels: a rounded square with a dark red-tinted gradient and three stacked 'mod layer' bars."""
+    a0, a1, bar = a0 or A0, a1 or A1, bar or BAR
     r = size * 0.22
     px = bytearray()
     # (y centre, x start, x end) as fractions. Two of the bars sit left, which makes the stack look left-heavy even when its
@@ -23,19 +30,19 @@ def draw(size: int) -> bytes:
             d = math.hypot(dx, dy) - r
             a = max(0.0, min(1.0, 0.5 - d))
             t = (fx + fy) / 2
-            R, G, B = (20 + 58 * t, 21 + 59 * t, 26 + 62 * t)  # near-black graphite -> dark grey, to match the app's dark theme
+            R, G, B = (a0[0] + (a1[0] - a0[0]) * t, a0[1] + (a1[1] - a0[1]) * t, a0[2] + (a1[2] - a0[2]) * t)
             for cy, x0, x1 in bars:
                 if abs(fy - cy) < bar_h and x0 <= fx <= x1:
                     # soft edge on the bar ends and top/bottom
                     e = min(bar_h - abs(fy - cy), fx - x0, x1 - fx) * size
                     k = max(0.0, min(1.0, e))
-                    R, G, B = R + (255 - R) * k, G + (255 - G) * k, B + (255 - B) * k
+                    R, G, B = R + (bar[0] - R) * k, G + (bar[1] - G) * k, B + (bar[2] - B) * k
             px += bytes((int(R), int(G), int(B), int(a * 255)))
     return bytes(px)
 
 
-def png(size: int) -> bytes:
-    raw = draw(size)
+def png(size: int, **colors) -> bytes:
+    raw = draw(size, **colors)
     rows = b"".join(b"\x00" + raw[y * size * 4:(y + 1) * size * 4] for y in range(size))
 
     def chunk(tag, data):

@@ -33,6 +33,14 @@ if a[0] == "inspect":
     print(json.dumps({"ok": True, "bodyGender": "Female", "voice": "Female", "counts": {"clothes": 41, "modItems": 26, "guns": 15, "outfits": 4}}))
 elif a[0] == "transfer":
     report = {"clothesAdded": 49} if "--clothes" in a else {}
+    if "--money" in a:
+        report["moneyBefore"] = 49066
+        report["moneyAfter"] = int(opt("--money"))
+    if "--strip-mods" in a:
+        report["modItemsRemoved"] = 45
+        report["modItemKinds"] = 38
+        report["modSlotsUnequipped"] = 0
+        report["outfitsCleared"] = 8
     if "--tidy" in a:
         report["tidyRemoved"] = 72
         report["tidyKinds"] = {"V's street outfit": 72}
@@ -243,6 +251,61 @@ class SaveTransferTest(unittest.TestCase):
             self.app.savetransfer_call("run", {"source": "ManualSave-8", "target": "ManualSave-3"})
         self.assertIn("at least one", cm.exception.message)
         self.assertTrue(self.app.savetransfer_call("preview", {"source": "ManualSave-8", "target": "ManualSave-3", "tidy": True})["ok"])
+
+    # ------------------------------------------------------------ remove mod items (a copy to play without mods)
+    def test_strip_mods_alone_needs_no_source_and_makes_a_new_slot(self):
+        before = tree(self.saves)
+        body = {"target": "ManualSave-8", "stripMods": True}
+        pv = self.app.savetransfer_call("preview", body)
+        self.assertEqual((pv["report"]["modItemsRemoved"], pv["report"]["outfitsCleared"]), (45, 8))
+        self.assertEqual(tree(self.saves), before)                         # a preview changes nothing
+        r = self.app.savetransfer_call("run", body)
+        self.assertEqual((r["source"], r["target"]), (None, "ManualSave-8"))
+        after = tree(self.saves)
+        self.assertEqual({k: v for k, v in after.items() if not k.startswith(r["slot"])}, before)       # the original is untouched
+        self.assertEqual(sorted(p.name for p in Path(r["backup"]).iterdir()), ["ManualSave-8"])         # and was backed up
+
+    def test_strip_mods_combines_with_gender_and_look(self):
+        r = self.app.savetransfer_call("run", {"source": "ManualSave-3", "target": "ManualSave-8", "gender": "male", "look": True, "stripMods": True})
+        self.assertEqual((r["source"], r["target"]), ("ManualSave-3", "ManualSave-8"))
+        self.assertEqual(r["report"]["modItemsRemoved"], 45)
+
+    def test_strip_mods_is_off_unless_asked(self):
+        with self.assertRaises(ApiError) as cm:
+            self.app.savetransfer_call("run", {"target": "ManualSave-8", "stripMods": False})
+        self.assertIn("at least one", cm.exception.message)
+
+    # ------------------------------------------------------------ set the money to an exact amount
+    def test_money_alone_needs_no_source_and_makes_a_new_slot(self):
+        before = tree(self.saves)
+        body = {"target": "ManualSave-8", "money": 25000}
+        pv = self.app.savetransfer_call("preview", body)
+        self.assertEqual((pv["report"]["moneyBefore"], pv["report"]["moneyAfter"]), (49066, 25000))
+        self.assertEqual(tree(self.saves), before)                         # a preview changes nothing
+        r = self.app.savetransfer_call("run", body)
+        self.assertEqual((r["source"], r["target"], r["report"]["moneyAfter"]), (None, "ManualSave-8", 25000))
+        after = tree(self.saves)
+        self.assertEqual({k: v for k, v in after.items() if not k.startswith(r["slot"])}, before)       # the original is untouched
+
+    def test_money_accepts_zero_and_typed_commas_as_text(self):
+        self.assertEqual(self.app.savetransfer_call("preview", {"target": "ManualSave-8", "money": 0})["report"]["moneyAfter"], 0)
+        self.assertEqual(self.app.savetransfer_call("preview", {"target": "ManualSave-8", "money": "25,000"})["report"]["moneyAfter"], 25000)
+
+    def test_a_silly_money_value_is_refused_before_anything_runs(self):
+        for bad in (-1, "abc", "12.5", 2_000_000_001, "1e9"):
+            for what in ("preview", "run"):
+                with self.subTest(bad=bad, what=what):
+                    with self.assertRaises(ApiError) as cm:
+                        self.app.savetransfer_call(what, {"target": "ManualSave-8", "money": bad})
+                    self.assertEqual(cm.exception.code, 400)
+                    self.assertIn("Money", cm.exception.message)
+        self.assertEqual(len(list(self.saves.iterdir())), 2)
+        self.assertFalse(self.cfg.save_backups_dir.exists())
+
+    def test_empty_money_means_keep_it(self):
+        with self.assertRaises(ApiError) as cm:
+            self.app.savetransfer_call("run", {"target": "ManualSave-8", "money": ""})
+        self.assertIn("at least one", cm.exception.message)
 
     # ------------------------------------------------------------ playthroughs
     def test_saves_have_a_readable_label_and_kind(self):

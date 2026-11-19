@@ -2,6 +2,15 @@
 
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = changes that need your data migrated.
 
+## 1.7.0 - 2026-11-18
+A new default look and icon, plus two new options in "Change or move a character".
+- **New default look.** A fresh install now starts in the dark theme with a pink-red accent instead of blue. Anything you already chose in the app is kept; this only changes what a new install starts with. The README screenshots show it.
+- **New icon.** A dark, red-tinted square with red bars, used for the app, the taskbar, shortcuts, the installer and the browser tab. Windows remembers old icons, so an existing shortcut may keep the old one until it is pinned again or Windows refreshes its icon cache.
+- **Set money** (in "Change or move a character..."): type an exact amount of Eurodollars (0 to 2,000,000,000) and it makes a new save with that amount. It needs no second save. Use it instead of a console command with a negative number, which can wrap around to billions.
+- **Remove mod items** (same screen): makes a copy that is safe to play without mods. It removes every item the plain game does not know (mod clothes and the like) and clears saved Equipment-EX outfits; scripts and settings that mods keep in the save are left alone. The old save is never changed. Tested: a save the plain game wrote from a copy that still held mod items had none left, so the plain game drops them when it saves; this option does the same on purpose.
+- The performance logger script (`tools/perf-watch.ps1`) also records read speed per drive and for the game.
+- API (additive, see `docs/API.md`): the save-transfer options accept `money` and `stripMods`. Nothing was removed or changed.
+
 ## 1.6.0 - 2026-11-17
 Change or move a character between Cyberpunk 2077 saves (optional add-on).
 - **Change or move a character…** ("..." menu, only shown when the add-on is installed). Pick a save to copy from and a save to put it on, then choose what moves: gender and voice, the look (face, hair, body shape, tattoos), clothes, Equipment-EX outfits and guns. Or just change the gender, which needs no save to copy from (this is also how to turn a character back).

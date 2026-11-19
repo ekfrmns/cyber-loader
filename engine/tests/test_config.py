@@ -126,3 +126,31 @@ class ZipImport(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DefaultLook(unittest.TestCase):
+    """A fresh install starts dark with the pink-red accent; whatever is saved still wins."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="modman-look-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.saved = {k: os.environ.pop(k, None) for k in ("MODMAN_DATA", "MODMAN_GAME", "CYBERLOADER_CONFIG")}
+        self.addCleanup(lambda: [os.environ.__setitem__(k, v) for k, v in self.saved.items() if v is not None])
+
+    def cfg(self):
+        c = Config(game=self.tmp / "game", data=self.tmp / "data", ui=self.tmp / "ui")
+        c.ensure()
+        return c
+
+    def test_fresh_install_is_dark_and_red(self):
+        self.assertEqual(self.cfg().settings(), {"theme": "dark", "accent": "#ff375f"})
+
+    def test_saved_choices_still_win(self):
+        c = self.cfg()
+        c.update_settings(theme="light", accent="#0a84ff")
+        self.assertEqual(self.cfg().settings(), {"theme": "light", "accent": "#0a84ff"})
+
+    def test_only_what_was_changed_is_saved(self):
+        c = self.cfg()
+        c.update_settings(theme="system")
+        self.assertEqual(self.cfg().settings(), {"theme": "system", "accent": "#ff375f"})

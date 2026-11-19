@@ -220,7 +220,7 @@ let enabled = new Set(profiles.get(current));
 let deployed = q.get('gfFree') === '1' ? new Set() : new Set(enabled);   // ?gfFree=1: nothing placed, so the game folder can be changed
 let running = q.get('running') === '1';
 let job = null;
-let settings = { theme: 'system', accent: '#0A84FF' };
+let settings = { theme: 'dark', accent: '#FF375F' };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('cmm.settings') || '{}')); } catch { /* ignore */ }
 const imports = new Map();
 
@@ -342,7 +342,7 @@ function progress() {
 const delay = () => new Promise((r) => setTimeout(r, (80 + Math.random() * 120) * SLOW));
 // Save transfer (invented saves; ?nosave=1 hides the feature like an install without the add-on)
 const SAVES = [
-  { id: 'ManualSave-14', kind: 'manual', label: 'Manual save 14', bodyGender: 'Female', voice: 'Female', level: 15, hours: 2.2, lifePath: 'StreetKid', modded: true, playthrough: 'b', savedAt: 1794000000, patch: '2.5', hasPicture: true, counts: { clothes: 41, modItems: 26, guns: 15, outfits: 4 } },
+  { id: 'ManualSave-14', kind: 'manual', label: 'Manual save 14', bodyGender: 'Female', voice: 'Female', level: 15, hours: 2.2, lifePath: 'StreetKid', modded: true, playthrough: 'b', savedAt: 1794000000, patch: '2.5', hasPicture: true, counts: { clothes: 41, modItems: 26, guns: 15, outfits: 4, money: 49066 } },
   { id: 'AutoSave-9', kind: 'auto', label: 'Autosave 9', bodyGender: 'Female', voice: 'Female', level: 15, hours: 1.9, lifePath: 'StreetKid', modded: true, playthrough: 'b', savedAt: 1793990000, patch: '2.5', hasPicture: true, counts: { clothes: 41, modItems: 26, guns: 14, outfits: 4 } },
   { id: 'ManualSave-6', kind: 'manual', label: 'Manual save 6', bodyGender: 'Male', voice: 'Male', level: 15, hours: 8.0, lifePath: 'Nomad', modded: false, playthrough: 'a', savedAt: 1793900000, patch: '2.5', hasPicture: true, counts: { clothes: 41, modItems: 0, guns: 32, outfits: 0 } },
   { id: 'AutoSave-3', kind: 'auto', label: 'Autosave 3', bodyGender: 'Male', voice: 'Male', level: 12, hours: 6.4, lifePath: 'Nomad', modded: false, playthrough: 'a', savedAt: 1793800000, patch: '2.5', hasPicture: true, counts: { clothes: 38, modItems: 0, guns: 28, outfits: 0 } },
@@ -363,6 +363,8 @@ function xferReport(b) {
   if (b.gender && b.gender !== 'keep') r.gender = b.gender;
   if (b.clothes) r.clothesAdded = Math.max(0, from.counts.clothes + from.counts.modItems - to.counts.clothes);
   if (b.guns) r.gunsAdded = Math.max(0, from.counts.guns - to.counts.guns);
+  if (b.money !== undefined && b.money !== null && b.money !== '') { r.moneyBefore = to.counts.money ?? 0; r.moneyAfter = Number(b.money); }
+  if (b.stripMods) { r.modItemsRemoved = to.counts.modItems; r.modItemKinds = Math.round(to.counts.modItems * 0.85); r.modSlotsUnequipped = 0; r.outfitsCleared = to.counts.outfits; }
   if (b.tidy) { r.tidyRemoved = to.counts.clothes > 50 ? 72 : 0; r.tidyKinds = r.tidyRemoved ? { 'V’s street outfit': 72 } : {}; }
   if (b.outfits) {
     r.outfitsAdded = to.counts.outfits || to.modded ? from.counts.outfits : 0;
@@ -374,7 +376,7 @@ function xferReport(b) {
 function xferCheck(b) {
   const bad = (m) => err(400, m);
   const copies = b.look || b.clothes || b.outfits || b.guns;
-  if (!(copies || b.tidy || (b.gender && b.gender !== 'keep'))) return bad('Tick at least one thing to transfer.');
+  if (!(copies || b.tidy || b.stripMods || (b.money !== undefined && b.money !== null && b.money !== '') || (b.gender && b.gender !== 'keep'))) return bad('Tick at least one thing to transfer.');
   if ((copies && !SAVES.some((x) => x.id === b.source)) || !SAVES.some((x) => x.id === b.target)) return bad('Pick a save from the list.');
   if (copies && b.source === b.target) return bad('The two saves have to be different.');
   return null;

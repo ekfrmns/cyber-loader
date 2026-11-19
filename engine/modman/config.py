@@ -188,7 +188,7 @@ class Config:
     # user-facing settings (theme/accent) live next to engine settings in settings.json
     def settings(self) -> dict:
         s = read_json(self.settings_file, {}) or {}
-        return {"theme": s.get("theme", "system"), "accent": s.get("accent", "#0a84ff")}
+        return {"theme": s.get("theme", "dark"), "accent": s.get("accent", "#ff375f")}
 
     def update_settings(self, theme=None, accent=None) -> dict:
         s = read_json(self.settings_file, {}) or {}

@@ -18,7 +18,7 @@ certutil -hashfile CyberLoader-Setup-<version>.exe SHA256
 
 All screenshots use invented sample mods.
 
-![The library with mods grouped into categories (dark theme)](screenshots/01-library-dark.png)
+![The library with mods grouped into categories (the default look: dark with a pink-red accent)](screenshots/01-library-dark.png)
 
 | | |
 |---|---|
@@ -38,7 +38,7 @@ All screenshots use invented sample mods.
   - Apply refuses to run while the game is open.
 - **Trash:** deleting a mod moves it to the app's own trash, so you can restore it.
 - **Change or move a character (optional add-on):** copy the gender, look, clothes, outfits or guns of one Cyberpunk save onto another, or just change a character's gender. It always makes a new save and backs up first. It is built on the MIT-licensed [CP2077SaveEditor](https://github.com/Deweh/CyberCAT-SimpleGUI) and is not part of the installer; see [docs/SAVE-TRANSFER.md](docs/SAVE-TRANSFER.md).
-- Light, dark or system theme with an accent colour.
+- Light, dark or system theme with an accent colour. A fresh install starts dark with a pink-red accent; your own choice always wins.
 
 ## Install
 

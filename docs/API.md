@@ -157,12 +157,15 @@ If the contract needs to change, the UI session writes the request to `docs/API-
     POST /api/savetransfer/name { playthrough, name }          -> { ok, id, name }
          Names a playthrough (whitespace tidied, 60 characters at most; an empty name clears it). Kept in `<data>\save-names.json`;
          no save is touched. 404 unknown playthrough, 500 not saved.
-    POST /api/savetransfer/inspect { save }                   -> { id, bodyGender, voice, counts: { clothes, modItems, guns, outfits } }
+    POST /api/savetransfer/inspect { save }                   -> { id, bodyGender, voice, counts: { clothes, modItems, guns, outfits, money } }
          Opens the save with the add-on (a few seconds). `modItems` = items the add-on cannot name (mod clothes).
-    POST /api/savetransfer/preview { source?, target, gender?, look?, clothes?, outfits?, guns?, tidy? }
+    POST /api/savetransfer/preview { source?, target, gender?, look?, clothes?, outfits?, guns?, tidy?, stripMods?, money? }
                                                               -> { ok, report: { look?, gender?, clothesAdded?, gunsAdded?, outfitsAdded?,
                                                                                  outfitSetsSkipped?, outfitPartsSkipped?, outfitsNote? } }
-         `gender` is "keep" (default), "female" or "male" (body and voice); the others are booleans. `tidy` (boolean) cuts every clothing kind held more than 4 times down to 2, keeping anything equipped or used by an
+         `gender` is "keep" (default), "female" or "male" (body and voice); the others are booleans. `stripMods` (boolean) makes the copy safe to load without mods: every item the plain game does not know is removed from every container
+         (anything equipped from them is unequipped first) and the Equipment-EX outfits and active outfit parts are cleared (report:
+         `modItemsRemoved`, `modItemKinds`, `modSlotsUnequipped`, `outfitsCleared`). Other mod data in the save is left as it is. `money` (whole number 0 to 2,000,000,000, also accepted as text with commas) sets the Eurodollars to exactly that amount (report:
+         `moneyBefore`, `moneyAfter`; an empty or missing value keeps the money; 400 for anything else). `tidy` (boolean) cuts every clothing kind held more than 4 times down to 2, keeping anything equipped or used by an
          Equipment-EX outfit first (report: `tidyRemoved`, `tidyKinds` = { name: removed }). `source` is only needed when
          look, clothes, outfits or guns is ticked (not for gender or tidy); a gender change alone uses just `target` (a `source` sent with it is ignored). Changes nothing: it only counts
          what a real run would add. `outfitsNote` explains why outfits cannot be added (for example the target has never run with the mod).

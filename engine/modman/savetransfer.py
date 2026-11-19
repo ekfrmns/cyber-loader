@@ -229,10 +229,20 @@ class SaveTransfer:
             raise TransferError(400, "gender must be keep, female or male")
         args = ["--gender", gender]
         picked = gender != "keep"
-        for key, flag in (("look", "--look"), ("clothes", "--clothes"), ("outfits", "--outfits"), ("guns", "--guns"), ("tidy", "--tidy")):
+        for key, flag in (("look", "--look"), ("clothes", "--clothes"), ("outfits", "--outfits"), ("guns", "--guns"), ("tidy", "--tidy"), ("stripMods", "--strip-mods")):
             if body.get(key):
                 args.append(flag)
                 picked = True
+        money = body.get("money")
+        if money is not None and money != "":
+            try:
+                n = int(str(money).strip().replace(",", ""))
+            except ValueError:
+                raise TransferError(400, "Money has to be a whole number, like 25000.")
+            if not 0 <= n <= 2_000_000_000:
+                raise TransferError(400, "Money has to be between 0 and 2,000,000,000.")
+            args += ["--money", str(n)]
+            picked = True
         if not picked:
             raise TransferError(400, "Tick at least one thing to transfer.")
         return args

@@ -17,6 +17,13 @@ The menu entry only appears when the add-on is installed. A normal install does 
 - **Tidy up:** removes surplus copies of identical clothes (any clothing kind held more than 4 times is cut down to 2). Anything equipped
   and anything an Equipment-EX outfit points at is kept first. Needs no source save. Made for piles that some mods can create (for example the
   default underwear), which add weight and can stop V sprinting.
+- **Remove mod items:** for a copy you want to play without mods. Removes every item the plain game does not know (mod clothes and similar) from
+  every container, unequips anything worn from that set, and clears the saved Equipment-EX outfits. Scripts and settings that other mods keep in
+  the save are left alone. Needs no source save. The old save is never changed.
+  Tested once (patch 2.5, one save, loading and looking at the inventory): a save that still holds mod items loads in the plain game and the mod clothes
+  are simply not shown; nothing breaks. Saving was tested too: a save the plain game wrote from such a copy (autosaves, same playthrough) held 0 mod items and 0 Equipment-EX outfits, down from 45 and 8, with guns, money and the rest unchanged. So the plain game drops them for good when it saves; removing them first gives the same result on purpose, and the original save is never changed.
+- **Money:** sets the Eurodollars to an exact amount (0 to 2,000,000,000). Needs no source save. Use it to take money away or add some;
+  do not use a console command with a negative number (the amount is stored as a positive number and could wrap around to billions).
 - It does not equip anything, copy money, quests, stats or the vanilla wardrobe, and it cannot change the playthrough of a save.
 
 ## How long it takes

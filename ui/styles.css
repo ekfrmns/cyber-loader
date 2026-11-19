@@ -33,10 +33,12 @@
   --row-h: 56px;
 
   /* Accent: --accent is the raw choice; JS derives the rest for contrast */
-  --accent: #0A84FF;
-  --accent-fill: #0A6FDB;
+  /* defaults = the dark theme with the pink-red accent (#FF375F); JS recomputes these for the chosen theme and accent */
+  --accent: #FF375F;
+  --accent-fill: #D92F51;
   --on-accent: #FFFFFF;
-  --accent-text: #0063CC;
+  --accent-text: #FF375F;
+  --accent-edge: #FF375F;
   --ring: var(--accent-text);
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
 
@@ -918,3 +920,5 @@ button.chip:hover { background: var(--fill-1); }
 @keyframes xf-pulse { 50% { opacity: .35; } }
 :root[data-reduce-motion] .xf-spin { animation: xf-pulse 1.6s ease-in-out infinite; border-top-color: var(--accent); }
 .xf-check { margin-top: 10px; }
+.xf-money-field { margin-top: 0; }
+.xf-money input { font-variant-numeric: tabular-nums; }

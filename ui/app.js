@@ -10,7 +10,7 @@ const ACCENTS = [
   ['Blue', '#0A84FF'], ['Purple', '#BF5AF2'], ['Pink', '#FF375F'], ['Orange', '#FF9F0A'],
   ['Yellow', '#FCEE0A'], ['Green', '#30D158'], ['Teal', '#40C8E0'], ['Graphite', '#8E8E93'],
 ];
-const DEFAULT_SETTINGS = { theme: 'system', accent: '#0A84FF' };
+const DEFAULT_SETTINGS = { theme: 'dark', accent: '#FF375F' };
 
 const $ = (s, r = document) => r.querySelector(s);
 const nf = new Intl.NumberFormat('en-US');
@@ -961,11 +961,15 @@ const xfGet = () => {
     gender: $('#xfForm input[name="xfGender"]:checked')?.value || 'keep',
     look: $('#xfLook').checked, clothes: $('#xfClothes').checked, outfits: $('#xfOutfits').checked, guns: $('#xfGuns').checked,
     tidy: $('#xfTidy').checked,
+    stripMods: $('#xfStrip').checked,
+    money: xfMoneyValue(),
   };
   o.source = xfNeedsSource(o) ? xfChosen('source') : null;
   return o;
 };
-const xfPicked = (o) => o.gender !== 'keep' || o.look || o.clothes || o.outfits || o.guns || o.tidy;
+const xfMoneyValue = () => { const t = ($('#xfMoney')?.value || '').replace(/[,\s$]/g, ''); return t === '' ? null : t; };
+const xfMoneyOk = (m) => m === null || (/^\d+$/.test(m) && Number(m) <= 2000000000);
+const xfPicked = (o) => o.gender !== 'keep' || o.look || o.clothes || o.outfits || o.guns || o.tidy || o.stripMods || o.money !== null;
 const xfJoin = (bits) => (bits.length > 1 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits[0] || '');
 
 function xfInfoText(id) {
@@ -975,13 +979,14 @@ function xfInfoText(id) {
   if (i.error) return i.error;
   const c = i.counts || {};
   return [`${i.bodyGender || '?'} body, ${i.voice || '?'} voice`, plural(c.clothes ?? 0, 'clothing piece') + (c.modItems ? ` (+${nf.format(c.modItems)} mod items)` : ''),
-    plural(c.guns ?? 0, 'gun'), plural(c.outfits ?? 0, 'outfit')].join(' · ');
+    plural(c.guns ?? 0, 'gun'), plural(c.outfits ?? 0, 'outfit'), c.money != null ? `${nf.format(c.money)} money` : ''].filter(Boolean).join(' · ');
 }
 
 function xfSummary(o) {
   const needs = xfNeedsSource(o);
   if (!o.target || (needs && !o.source)) return { text: '', bad: false, ok: false };
   if (needs && o.source === o.target) return { text: 'Pick two different saves.', bad: true, ok: false };
+  if (!xfMoneyOk(o.money)) return { text: 'Money has to be a whole number from 0 to 2,000,000,000, like 25000.', bad: true, ok: false };
   if (!xfPicked(o)) return { text: 'Tick at least one thing to move.', bad: false, ok: false };
   if (xf.error) return { text: xf.error, bad: true, ok: false };
   if (xf.checking) return { text: 'Checking what would change. This takes about half a minute.', bad: false, ok: false, busy: true };
@@ -995,8 +1000,10 @@ function xfSummary(o) {
     if (o.guns) bits.push('get the guns it doesn’t have yet');
     if (o.outfits) bits.push('get the outfits it doesn’t have yet');
     if (o.tidy) bits.push('have piles of identical clothes cut down to 2 of each');
+    if (o.stripMods) bits.push('have the mod items and saved outfits removed');
+    if (o.money !== null) bits.push(`have its money set to ${nf.format(Number(o.money))}`);
     const stay = needs ? `“${o.source}” and “${o.target}” stay exactly as they are` : `“${o.target}” stays exactly as it is`;
-    return { text: `The new save will ${xfJoin(bits)}. ${stay}. Making it takes about a minute.`, bad: false, ok: true, canCheck: needs || o.tidy };
+    return { text: `The new save will ${xfJoin(bits)}. ${stay}. Making it takes about a minute.`, bad: false, ok: true, canCheck: needs || o.tidy || o.stripMods || o.money !== null };
   }
   const bits = [];
   if (o.gender !== 'keep') bits.push(`have V as ${o.gender} (voice too)`);
@@ -1005,7 +1012,9 @@ function xfSummary(o) {
   if (o.guns) bits.push(r.gunsAdded ? `get ${plural(r.gunsAdded, 'gun')}` : 'get no guns (it has them all)');
   if (o.outfits) bits.push(r.outfitsAdded ? `get ${plural(r.outfitsAdded, 'outfit')}` : 'get no outfits');
   if (o.tidy) bits.push(r.tidyRemoved ? `lose ${plural(r.tidyRemoved, 'surplus copy', 'surplus copies')} (${Object.entries(r.tidyKinds || {}).map(([n, c]) => `${c} × ${n}`).join(', ')})` : 'lose nothing (no piles to cut down)');
-  const something = o.gender !== 'keep' || r.look || r.clothesAdded || r.gunsAdded || r.outfitsAdded || r.tidyRemoved;
+  if (o.stripMods) bits.push(r.modItemsRemoved ? `lose ${plural(r.modItemsRemoved, 'mod item')}${r.outfitsCleared ? ` and ${plural(r.outfitsCleared, 'saved outfit')}` : ''}` : 'lose no mod items (there are none)');
+  if (o.money !== null && r.moneyAfter !== undefined) bits.push(`have its money go from ${nf.format(r.moneyBefore)} to ${nf.format(r.moneyAfter)}`);
+  const something = o.gender !== 'keep' || r.look || r.clothesAdded || r.gunsAdded || r.outfitsAdded || r.tidyRemoved || r.modItemsRemoved || r.outfitsCleared || r.moneyAfter !== undefined;
   let text = something ? `The new save will ${xfJoin(bits)}. ${needs ? `“${o.source}” and “${o.target}” stay` : `“${o.target}” stays`} exactly as ${needs ? 'they are' : 'it is'}.`
     : 'Nothing to add: that save already has everything you ticked.';
   if (r.outfitsNote) text += ` ${r.outfitsNote}`;
@@ -1118,7 +1127,8 @@ async function openTransfer(trigger) {
   xf.save.target[xf.pick.target] = xf.pts[1] ? xf.pts[1].saves[0] : (xf.pts[0].saves[1] || xf.pts[0].saves[0]);
   xfRenderSide('source'); xfRenderSide('target');
   $('#xfForm input[name="xfGender"][value="keep"]').checked = true;
-  for (const id of ['#xfLook', '#xfClothes', '#xfOutfits', '#xfGuns', '#xfTidy']) $(id).checked = false;
+  for (const id of ['#xfLook', '#xfClothes', '#xfOutfits', '#xfGuns', '#xfTidy', '#xfStrip']) $(id).checked = false;
+  $('#xfMoney').value = '';
   xfShowForm(true);
   xfRender();
   openModal($('#xferSheet'), { trigger, initialFocus: '#xfSourceList input:checked' });
@@ -1156,6 +1166,8 @@ async function xfRun() {
     if (rep.clothesAdded) did.push(`${plural(rep.clothesAdded, 'piece')} of clothing added`);
     if (rep.gunsAdded) did.push(`${plural(rep.gunsAdded, 'gun')} added`);
     if (rep.outfitsAdded) did.push(`${plural(rep.outfitsAdded, 'outfit')} added`);
+    if (rep.moneyAfter !== undefined) did.push(`money set to ${nf.format(rep.moneyAfter)} (was ${nf.format(rep.moneyBefore)})`);
+    if (rep.modItemsRemoved) did.push(`${plural(rep.modItemsRemoved, 'mod item')} removed${rep.outfitsCleared ? ` and ${plural(rep.outfitsCleared, 'saved outfit')} cleared` : ''}`);
     if (rep.tidyRemoved) did.push(`${plural(rep.tidyRemoved, 'surplus copy', 'surplus copies')} of identical clothes removed`);
     $('#xfDoneTitle').textContent = `Your new save is “${r.slot}”`;
     const pt = xfPt(r.playthrough);
@@ -1782,6 +1794,7 @@ function wire() {
   $('#xfForm').addEventListener('click', (e) => { const b = e.target.closest('[data-rename]'); if (b) xfRename(b.dataset.rename, b); });
   $('#xfRun').addEventListener('click', xfRun);
   $('#xfCheck').addEventListener('click', xfPreview);
+  $('#xfMoney').addEventListener('input', xfChanged);
   $('#xfAgain').addEventListener('click', xfAgain);
   $('#historySheet').addEventListener('click', historyClick);
   $('#trashSheet').addEventListener('click', trashClick);
