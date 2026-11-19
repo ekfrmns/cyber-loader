@@ -2,6 +2,11 @@
 
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = a redesign or changes that need your data migrated.
 
+## 2.0.1 - 2026-11-19
+A small fix to the side bar.
+- **Side bar tooltips.** The tooltips on the side bar items were part of the bar itself, so the bar could be dragged sideways (a slider appeared under Settings and showed nothing) and a tooltip could show underneath the page instead of over it. Tooltips now sit on top of the whole window, appear after half a second on hover (straight away from the keyboard) and the side bar no longer scrolls sideways.
+- API: unchanged.
+
 ## 2.0.0 - 2026-11-19
 A new look and layout for the whole app. Nothing about your data changes: your library, profiles, saves and settings carry over as they are, and the engine and its API are unchanged.
 - **Side bar layout.** Library, Profiles, Runs, Characters, History and trash, and Settings are now pages you switch between from a side bar. The "..." menu, the "+" button and the old pop-up windows (Appearance, Game folder, History, Trash and the character tool) are gone; each is a page now. Your active profile (with a Switch button) sits at the top of the side bar and the game's state at the bottom. Below about 1100 px wide the side bar shrinks to icons, and below 760 px the Library's category list hides.
