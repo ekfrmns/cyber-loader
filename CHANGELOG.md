@@ -3,7 +3,8 @@
 Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = a redesign or changes that need your data migrated.
 
 ## 2.0.1 - 2026-11-19
-A small fix to the side bar.
+A small fix to the side bar, and the app icon now matches the logo.
+- **App icon.** The icon (app, taskbar, shortcuts, installer and browser tab) uses the same softer pink as the logo in the window, with the lighter middle bar. Windows remembers old icons, so an existing shortcut may keep the old one until it is pinned again or Windows refreshes its icon cache.
 - **Side bar tooltips.** The tooltips on the side bar items were part of the bar itself, so the bar could be dragged sideways (a slider appeared under Settings and showed nothing) and a tooltip could show underneath the page instead of over it. Tooltips now sit on top of the whole window, appear after half a second on hover (straight away from the keyboard) and the side bar no longer scrolls sideways.
 - API: unchanged.
 

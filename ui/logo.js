@@ -1,6 +1,6 @@
 // The app logo, drawn on the spot from the accent colour (no image files, so any colour from the picker works and it follows the picker live).
 // A dark rounded tile in the accent's hue, three bars in the accent (toned down a little), the middle bar a touch lighter.
-// The shape is the same as the icon file (launcher/cyberloader.ico), which is not touched.
+// The shape and, for the default pink, the colours are the same as the icon file (launcher/cyberloader.ico, drawn by launcher/make_icon.py).
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 function hexToHsl(hex) {
