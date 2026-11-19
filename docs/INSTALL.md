@@ -6,13 +6,13 @@
    - **Install folder** (default: your local app data).
    - **Cyberpunk 2077 folder**: found automatically on Steam, GOG, Epic or common folders; browse if it isn't.
    - **Where your mods live**: the library can reach tens of GB. Keep it on the **same drive as the game**: CyberLoader then links mod files into the game (instant, no extra space) instead of copying them.
-   - **Options**: *Install 7-Zip* (recommended; needed for `.7z` and `.rar` mods, plain `.zip` works without it), Desktop and Start menu shortcuts ("Cyber Loader").
+   - **Options**: *Install 7-Zip* (recommended; needed for `.7z` and `.rar` mods, plain `.zip` works without it), a Start menu shortcut ("Cyber Loader", on by default) and a Desktop shortcut (off by default; tick it if you want one).
 3. Open **Cyber Loader**, drag a mod archive or folder onto the window to add it, turn mods on or off, then press Apply (the game must be closed).
 
 Updating: run a newer Setup over the old install, pointing at the same folder. Your library, profiles and trash are kept.
 Uninstall: Windows Settings > Apps > CyberLoader (or `Uninstall.exe` in the install folder). Your library is kept unless you tick the box to delete it.
 
-Silent install: `Setup.exe /S /D=<install dir> /GAME=<Cyberpunk 2077 dir> /DATA=<data dir> [/7ZIP=0] [/NODESKTOP] [/NOSTART] [/LAUNCH]`; silent uninstall: `Uninstall.exe /S [/DELETEDATA]`.
+Silent install: `Setup.exe /S /D=<install dir> /GAME=<Cyberpunk 2077 dir> /DATA=<data dir> [/7ZIP=0] [/DESKTOP] [/NOSTART] [/LAUNCH]`; silent uninstall: `Uninstall.exe /S [/DELETEDATA]`.
 
 ## For the maintainer (building the installer)
 Needs on the build machine: Python 3.13, the C# compiler that ships with Windows, and 7-Zip (its files are copied into the installer as the optional component).

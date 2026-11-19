@@ -21,48 +21,226 @@
   })();
 </script>
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="shell.css">
 <script type="module" src="app.js"></script>
 </head>
 <body>
 <div class="ambient" aria-hidden="true"></div>
 
 <div id="app" data-modal-inert>
-  <!-- Top bar = window title bar: transparent, draggable (data-window-drag, handled by the host). -->
-  <header class="topbar" id="topbar" data-window-drag>
-    <div class="topbar-inner">
-      <button class="btn btn-icon" id="newProfileBtn" type="button" aria-label="New profile" title="New profile"><span data-icon="plus" data-size="18"></span></button>
-      <button class="btn btn-profile" id="profileBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profileMenu">
-        <span class="profile-caption">Profile</span>
-        <span class="profile-name" id="profileName">&nbsp;</span>
-        <span data-icon="chevronDown" data-size="16" class="profile-chev"></span>
-      </button>
+  <!-- Side bar: who you are (profile), where you go, the game, settings -->
+  <aside class="rail" id="rail" aria-label="Main">
+    <div class="rail-brand" data-window-drag><span class="rail-logo" id="railLogo" aria-hidden="true"></span><span class="rail-name">Cyber Loader</span></div>
+    <button class="rail-prof" id="profileBtn" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="profileMenu">
+      <span class="rail-initial" id="profInitial" aria-hidden="true"></span>
+      <small>Active profile</small>
+      <b id="profileName">&nbsp;</b>
+      <span class="sw-pill">Switch<span data-icon="chevronDown" data-size="14"></span></span>
+      <span class="rail-meter" aria-hidden="true"><i id="railMeter"></i></span>
+      <span class="rail-prof-line"><span id="railProfOn">&nbsp;</span><em id="railProfWait"></em></span>
+    </button>
+    <nav class="rail-nav" aria-label="Sections">
+      <div class="rail-grp">Mods</div>
+      <div class="rail-set">
+        <i class="rail-pill"></i>
+        <button class="rn" type="button" data-page="mods"><span class="rn-ic"><span data-icon="mods" data-size="18"></span></span><span class="rn-t"><b>Library</b><small id="rnModsSub">&nbsp;</small></span><span class="rn-pend" id="rnPend" hidden></span></button>
+        <button class="rn" type="button" data-page="profiles"><span class="rn-ic"><span data-icon="swap" data-size="18"></span></span><span class="rn-t"><b>Profiles</b><small id="rnProfSub">&nbsp;</small></span></button>
+      </div>
+      <div id="railSaves" hidden>
+        <div class="rail-grp">Saves</div>
+        <div class="rail-set">
+          <i class="rail-pill"></i>
+          <button class="rn" type="button" data-page="runs"><span class="rn-ic"><span data-icon="gameplay" data-size="18"></span></span><span class="rn-t"><b>Runs</b><small>Your playthroughs</small></span></button>
+          <button class="rn" type="button" data-page="characters"><span class="rn-ic"><span data-icon="characters" data-size="18"></span></span><span class="rn-t"><b>Characters</b><small>Change or move a look</small></span></button>
+        </div>
+      </div>
+      <div class="rail-grp">Safety</div>
+      <div class="rail-set">
+        <i class="rail-pill"></i>
+        <button class="rn" type="button" data-page="history"><span class="rn-ic"><span data-icon="restore" data-size="18"></span></span><span class="rn-t"><b>History and trash</b><small>Setups and deleted mods</small></span></button>
+      </div>
+    </nav>
+    <div class="rail-spacer"></div>
+    <div class="rail-game">
+      <div class="rail-grp">Game</div>
+      <b>Cyberpunk 2077</b>
+      <span class="game-line" id="gameChip" role="status"><span class="chip-dot"></span><span class="chip-label">Checking…</span></span>
+      <small id="gameVer">&nbsp;</small>
+    </div>
+    <div class="rail-set">
+      <i class="rail-pill"></i>
+      <button class="rn" type="button" data-page="settings"><span class="rn-ic"><span data-icon="gear" data-size="18"></span></span><span class="rn-t"><b>Settings</b><small>Game folder, appearance</small></span></button>
+    </div>
+  </aside>
 
+  <div class="main-col">
+    <!-- Top bar = window title bar: transparent, draggable (data-window-drag, handled by the host). -->
+    <header class="topbar" id="topbar" data-window-drag>
       <div class="search">
         <span data-icon="search" data-size="16" class="search-icon"></span>
-        <input id="search" type="search" placeholder="Search mods" aria-label="Search mods" autocomplete="off" spellcheck="false" aria-keyshortcuts="/">
+        <input id="search" type="search" placeholder="Search your mods" aria-label="Search your mods" autocomplete="off" spellcheck="false" aria-keyshortcuts="/">
         <kbd class="search-kbd" aria-hidden="true">/</kbd>
       </div>
+      <span class="chip chip-demo" id="demoChip" hidden title="The engine isn't connected, so this is sample data">Demo data</span>
+    </header>
 
-      <div class="chips">
-        <span class="chip chip-demo" id="demoChip" hidden title="The engine isn't connected, so this is sample data">Demo data</span>
-        <span class="chip" id="gameChip" role="status"><span class="chip-dot"></span><span class="chip-label">Checking…</span></span>
-      </div>
+    <!-- One slim strip on every page: a label and one line. Same height everywhere, so the boxes below never jump. -->
+    <div class="strip" id="strip"><h1 id="stripT">Mods · Library</h1><span id="stripS">&nbsp;</span></div>
 
-      <button class="btn btn-icon" id="moreBtn" type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded="false" aria-controls="moreMenu">
-        <span data-icon="more" data-size="20"></span>
-      </button>
+    <div class="pages" id="pages">
+      <!-- LIBRARY: the list on the left jumps to a section of the long list on the right -->
+      <section class="page page-lib" id="page-mods" aria-label="Library">
+        <div class="lib-cats" id="cats" role="navigation" aria-label="Categories"></div>
+        <div class="scroller" id="scroller">
+          <main class="main" id="main">
+            <div id="banner" class="banner" role="status" hidden></div>
+            <div id="list" class="list"></div>
+            <div class="list-spacer" aria-hidden="true"></div>
+          </main>
+        </div>
+      </section>
+
+      <!-- SETTINGS: game folder and appearance -->
+      <section class="page page-settings" id="page-settings" aria-label="Settings" hidden>
+        <div class="set-two">
+          <div class="set-col">
+            <section class="set-sec" aria-labelledby="setGameH">
+              <h2 class="set-h" id="setGameH">Game</h2>
+              <div class="set-card set-pad">
+                <div class="gf-current">
+                  <div class="gf-label">Game folder in use now</div>
+                  <div class="gf-path" id="gfPath"></div>
+                  <div class="gf-status" id="gfStatus"></div>
+                </div>
+                <div class="callout" id="gfLock" hidden><span data-icon="info" data-size="18"></span><span id="gfLockText"></span></div>
+                <div class="input-field" id="gfChange">
+                  <span id="gfLabel">Change to</span>
+                  <div class="gf-row">
+                    <input id="gfInput" type="text" autocomplete="off" spellcheck="false" placeholder="Paste the full path of the game folder" aria-labelledby="gfLabel" aria-describedby="gfMsg">
+                    <button class="btn" id="gfBrowse" type="button" hidden>Browse…</button>
+                  </div>
+                  <p class="gf-msg" id="gfMsg" role="status"></p>
+                </div>
+                <div class="set-actions"><button class="btn btn-primary" id="gfSave" type="button" disabled>Use this folder</button></div>
+              </div>
+            </section>
+          </div>
+          <div class="set-col">
+            <section class="set-sec" aria-labelledby="setLookH">
+              <h2 class="set-h" id="setLookH">Appearance</h2>
+              <div class="set-card set-pad">
+                <fieldset class="field">
+                  <legend class="field-label">Theme</legend>
+                  <div class="segmented">
+                    <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+                    <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+                    <label><input type="radio" name="theme" value="system"><span>System</span></label>
+                  </div>
+                </fieldset>
+                <fieldset class="field">
+                  <legend class="field-label">Accent colour</legend>
+                  <div class="swatches" id="swatches"></div>
+                  <div class="cpick" id="cpick" hidden></div>
+                </fieldset>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <!-- HISTORY AND TRASH: setups you can go back to, mods you can bring back -->
+      <section class="page page-two" id="page-history" aria-label="History and trash" hidden>
+        <div class="pg-body">
+          <div class="pg-col">
+            <div class="segmented seg-top" id="histTabs" role="radiogroup" aria-label="Show">
+              <label><input type="radio" name="histTab" value="setups" checked><span>Setup history</span></label>
+              <label><input type="radio" name="histTab" value="trash"><span>Deleted mods</span></label>
+            </div>
+            <div class="pg-scroll" id="histList" role="list"></div>
+            <button class="btn btn-soft-danger" id="trEmpty" type="button" hidden><span data-icon="trash" data-size="16"></span>Empty trash…</button>
+          </div>
+          <div class="detail" id="histDetail" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- PROFILES -->
+      <section class="page page-two" id="page-profiles" aria-label="Profiles" hidden>
+        <div class="pg-body">
+          <div class="pg-col">
+            <div class="pg-scroll" id="profList" role="list"></div>
+            <button class="btn btn-primary add-btn" id="profNew" type="button"><span data-icon="plus" data-size="16"></span>New profile</button>
+          </div>
+          <div class="detail" id="profDetail" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- RUNS: the playthroughs found in the game's saves folder (needs the save tool) -->
+      <section class="page page-two" id="page-runs" aria-label="Runs" hidden>
+        <div class="pg-body">
+          <div class="pg-col"><div class="pg-scroll" id="runList" role="listbox" aria-label="Runs"></div></div>
+          <div class="detail" id="runDetail" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- CHARACTERS: pick the character on the left, everything you can do with it on the right -->
+      <section class="page page-two" id="page-characters" aria-label="Characters" hidden>
+        <div class="pg-body">
+          <div class="pg-col"><div class="pg-scroll" id="xfTargetList" role="listbox" aria-label="Which character"></div></div>
+          <div class="detail" id="xfForm">
+            <div class="xf-main" id="xfMain">
+              <div class="callout" id="xfGame" hidden><span data-icon="info" data-size="18"></span><span>The game is running. Close it first, then make the new save.</span></div>
+              <div class="detail-head">
+                <div><h2 id="xfName">&nbsp;</h2><p id="xfMeta">&nbsp;</p></div>
+                <div class="save-pick"><span>Start from</span><select id="xfTargetSave" data-xf-save="target" aria-label="Save to start from"></select></div>
+              </div>
+              <div class="tiles" id="xfTiles"></div>
+              <div class="segmented ch-tabs" id="xfTabs" role="radiogroup" aria-label="What to do">
+                <label><input type="radio" name="xfTab" value="change" checked><span>Change this character<i class="cnt" id="xfCntChange" hidden>0</i></span></label>
+                <label><input type="radio" name="xfTab" value="copy"><span>Copy from a run save<i class="cnt" id="xfCntCopy" hidden>0</i></span></label>
+              </div>
+              <div class="grow">
+                <div class="ft-grid" id="xfPanelChange">
+                  <div class="ft static"><div class="ft-top"><span class="ft-ic"><span data-icon="characters" data-size="20"></span></span></div><div><b>Gender and voice</b><small>Switches the body to the default look for that gender and sets the voice.</small></div>
+                    <div class="ft-foot"><div class="segmented" role="radiogroup" aria-label="Gender and voice">
+                      <label><input type="radio" name="xfGender" value="keep" checked><span>Keep as it is</span></label>
+                      <label><input type="radio" name="xfGender" value="female"><span>Female</span></label>
+                      <label><input type="radio" name="xfGender" value="male"><span>Male</span></label></div></div></div>
+                  <div class="ft static"><div class="ft-top"><span class="ft-ic"><span data-icon="coin" data-size="20"></span></span></div><div><b id="xfMoneyLabel">Money</b><small id="xfMoneyHint">Set it to an exact amount. Leave empty to keep what it has.</small></div>
+                    <div class="ft-foot money-in"><input id="xfMoney" type="text" inputmode="numeric" autocomplete="off" placeholder="for example 25000" aria-labelledby="xfMoneyLabel" aria-describedby="xfMoneyHint"></div></div>
+                  <label class="ft"><span class="ft-top"><span class="ft-ic"><span data-icon="trash" data-size="20"></span></span><input class="ft-ctl" type="checkbox" id="xfTidy"></span><span><b>Remove piles of identical clothes</b><small>Cuts any clothing kind you hold more than 4 times down to 2. Nothing you are wearing or use in an outfit is removed.</small></span></label>
+                  <label class="ft"><span class="ft-top"><span class="ft-ic"><span data-icon="minusCircle" data-size="20"></span></span><input class="ft-ctl" type="checkbox" id="xfStrip"></span><span><b>Remove mod items</b><small>Takes out the clothes and other items the plain game does not know, and clears the saved Equipment-EX outfits. Use it on a copy you want to play with the Empty profile.</small></span></label>
+                </div>
+                <div id="xfPanelCopy" hidden>
+                  <div class="ft-grid">
+                    <label class="ft"><span class="ft-top"><span class="ft-ic"><span data-icon="body" data-size="20"></span></span><input class="ft-ctl" type="checkbox" id="xfLook"></span><span><b>Look</b><small>Face, hair, body shape and tattoos. The body type follows the save you copy from. The voice stays as it is.</small></span></label>
+                    <label class="ft"><span class="ft-top"><span class="ft-ic"><span data-icon="clothing" data-size="20"></span></span><input class="ft-ctl" type="checkbox" id="xfClothes"></span><span><b>Clothes</b><small>Every piece the other save has and this one doesn’t, mod clothes included.</small></span></label>
+                    <label class="ft"><span class="ft-top"><span class="ft-ic"><span data-icon="content" data-size="20"></span></span><input class="ft-ctl" type="checkbox" id="xfOutfits"></span><span><b>Outfits</b><small>Saved outfits from Equipment-EX. Copy the clothes with them.</small></span></label>
+                    <label class="ft"><span class="ft-top"><span class="ft-ic"><span data-icon="target" data-size="20"></span></span><input class="ft-ctl" type="checkbox" id="xfGuns"></span><span><b>Guns</b><small>Weapons the other save has and this one doesn’t.</small></span></label>
+                  </div>
+                  <div class="from-row" id="xfSourceBox">
+                    <div class="side-label"><span id="xfRunLabel">Which run?</span></div>
+                    <div class="xf-pts" id="xfSourceList" role="radiogroup" aria-labelledby="xfRunLabel"></div>
+                    <div class="side-label side-label-2"><span id="xfSaveLabel">Which save?</span></div>
+                    <div class="save-pick save-pick-src"><select id="xfSourceSave" data-xf-save="source" aria-labelledby="xfSaveLabel"></select></div>
+                    <p class="xf-hint" id="xfSourceHint"></p>
+                  </div>
+                </div>
+              </div>
+              <div class="detail-actions with-sum">
+                <p class="sum" id="xfSum" role="status" aria-live="polite"></p>
+                <button class="btn" id="xfCheck" type="button" hidden>Check first</button>
+                <button class="btn btn-primary" id="xfRun" type="button" disabled>Make new save</button>
+              </div>
+            </div>
+            <div class="xf-done" id="xfDone" hidden>
+              <div class="detail-head"><div><h2 id="xfDoneTitle"></h2><p id="xfDoneText"></p></div></div>
+              <p class="xf-hint" id="xfDoneBackup"></p>
+              <div class="detail-actions"><button class="btn btn-primary" id="xfAgain" type="button">Make another</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
-  </header>
-
-  <div class="scroller" id="scroller">
-  <main class="main" id="main">
-    <div class="page-head">
-      <h1 class="page-title">Library</h1>
-      <p class="page-sub" id="pageSub">&nbsp;</p>
-    </div>
-    <div id="banner" class="banner" role="status" hidden></div>
-    <div id="list" class="list"></div>
-  </main>
   </div>
 </div>
 
@@ -90,7 +268,7 @@
   <div class="bar-view" data-view="done" hidden>
     <span class="success" aria-hidden="true">
       <span class="success-halo" id="halo"></span>
-      <span class="success-badge" id="badge"><span data-icon="check" data-size="18"></span></span>
+      <span class="success-badge" id="badge"><span data-icon="check" data-size="22"></span></span>
     </span>
     <div class="bar-text">
       <div class="bar-title">Applied</div>
@@ -135,156 +313,6 @@
   </footer>
 </section>
 
-<!-- Appearance sheet -->
-<section id="settingsSheet" class="sheet sheet-sm" role="dialog" aria-modal="true" aria-labelledby="stTitle" hidden>
-  <header class="sheet-head">
-    <div>
-      <h2 class="sheet-title" id="stTitle">Appearance</h2>
-      <p class="sheet-sub">Saved for next time.</p>
-    </div>
-    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
-  </header>
-  <div class="sheet-body">
-    <fieldset class="field">
-      <legend class="field-label">Theme</legend>
-      <div class="segmented">
-        <label><input type="radio" name="theme" value="light"><span>Light</span></label>
-        <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
-        <label><input type="radio" name="theme" value="system"><span>System</span></label>
-      </div>
-    </fieldset>
-    <fieldset class="field">
-      <legend class="field-label">Accent colour</legend>
-      <div class="swatches" id="swatches"></div>
-    </fieldset>
-  </div>
-</section>
-
-<!-- Game folder -->
-<section id="gameSheet" class="sheet sheet-sm" role="dialog" aria-modal="true" aria-labelledby="gfTitle" hidden>
-  <header class="sheet-head">
-    <div>
-      <h2 class="sheet-title" id="gfTitle">Game folder</h2>
-      <p class="sheet-sub">Where Cyberpunk 2077 is installed. Mods are placed in here.</p>
-    </div>
-    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
-  </header>
-  <div class="sheet-body">
-    <div class="gf-current">
-      <div class="gf-label">In use now</div>
-      <div class="gf-path" id="gfPath"></div>
-      <div class="gf-status" id="gfStatus"></div>
-    </div>
-    <div class="callout" id="gfLock" hidden><span data-icon="info" data-size="18"></span><span id="gfLockText"></span></div>
-    <div class="input-field" id="gfChange">
-      <span id="gfLabel">Change to</span>
-      <div class="gf-row">
-        <input id="gfInput" type="text" autocomplete="off" spellcheck="false" placeholder="Paste the full path of the game folder" aria-labelledby="gfLabel" aria-describedby="gfMsg">
-        <button class="btn" id="gfBrowse" type="button" hidden>Browse…</button>
-      </div>
-      <p class="gf-msg" id="gfMsg" role="status"></p>
-    </div>
-  </div>
-  <footer class="sheet-foot">
-    <span class="spacer"></span>
-    <button class="btn" type="button" data-close>Cancel</button>
-    <button class="btn btn-primary" id="gfSave" type="button" disabled>Use this folder</button>
-  </footer>
-</section>
-
-<!-- Change or move a character between saves (optional add-on) -->
-<section id="xferSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="xfTitle" hidden>
-  <header class="sheet-head">
-    <div>
-      <h2 class="sheet-title" id="xfTitle">Change or move a character</h2>
-      <p class="sheet-sub" id="xfSub">Copy a look, clothes or gender from one save onto another. This makes a new save; your saves are never changed.</p>
-    </div>
-    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
-  </header>
-  <div class="sheet-body" id="xfBody">
-    <div id="xfForm">
-      <div class="callout" id="xfGame" hidden><span data-icon="info" data-size="18"></span><span>The game is running. Close it first, then make the new save.</span></div>
-      <fieldset class="field xf-side">
-        <legend class="field-label">Copy from</legend>
-        <div class="xf-pts" id="xfSourceList" role="radiogroup" aria-label="Copy from: pick a playthrough, then a save"></div>
-        <p class="xf-hint" id="xfSourceHint"></p>
-      </fieldset>
-      <fieldset class="field xf-side">
-        <legend class="field-label">Put it on</legend>
-        <div class="xf-pts" id="xfTargetList" role="radiogroup" aria-label="Put it on: pick a playthrough, then a save"></div>
-        <p class="xf-hint" id="xfTargetHint"></p>
-      </fieldset>
-      <fieldset class="field xf-field">
-        <legend class="field-label">Gender and voice</legend>
-        <div class="segmented">
-          <label><input type="radio" name="xfGender" value="keep" checked><span>Keep as it is</span></label>
-          <label><input type="radio" name="xfGender" value="female"><span>Female</span></label>
-          <label><input type="radio" name="xfGender" value="male"><span>Male</span></label>
-        </div>
-      </fieldset>
-      <fieldset class="field xf-checks">
-        <legend class="field-label">Also copy</legend>
-        <label class="check"><input type="checkbox" id="xfLook"><span class="xf-what"><b>Look</b><small>Face, hair, body shape and tattoos. The body type follows the save you copy from; the voice stays as it is.</small></span></label>
-        <label class="check"><input type="checkbox" id="xfClothes"><span class="xf-what"><b>Clothes</b><small>Every piece the other save has and this one doesn’t, mod clothes included.</small></span></label>
-        <label class="check"><input type="checkbox" id="xfOutfits"><span class="xf-what"><b>Outfits</b><small>Saved outfits from Equipment-EX. Copy the clothes with them.</small></span></label>
-        <label class="check"><input type="checkbox" id="xfGuns"><span class="xf-what"><b>Guns</b><small>Weapons the other save has and this one doesn’t.</small></span></label>
-      </fieldset>
-      <fieldset class="field xf-checks">
-        <legend class="field-label">Tidy up</legend>
-        <label class="check"><input type="checkbox" id="xfTidy"><span class="xf-what"><b>Remove piles of identical clothes</b><small>Cuts any clothing kind you hold more than 4 times down to 2. Nothing you are wearing or use in an outfit is removed.</small></span></label>
-        <label class="check"><input type="checkbox" id="xfStrip"><span class="xf-what"><b>Remove mod items (to play without mods)</b><small>Takes out the clothes and other items the plain game does not know, and clears the saved Equipment-EX outfits. Use it on a copy you want to play with the Empty profile.</small></span></label>
-      </fieldset>
-      <fieldset class="field xf-money">
-        <legend class="field-label">Money</legend>
-        <label class="input-field xf-money-field"><span id="xfMoneyLabel">Set money to (leave empty to keep it)</span>
-          <input id="xfMoney" type="text" inputmode="numeric" autocomplete="off" placeholder="for example 25000" aria-describedby="xfMoneyHint"></label>
-        <p class="xf-hint" id="xfMoneyHint"></p>
-      </fieldset>
-      <p class="xf-sum" id="xfSum" role="status" aria-live="polite"></p>
-      <button class="btn xf-check" id="xfCheck" type="button" hidden>Check what it would add (about 30 seconds)</button>
-    </div>
-    <div id="xfDone" class="xf-done" hidden>
-      <h3 class="xf-done-title" id="xfDoneTitle"></h3>
-      <p id="xfDoneText"></p>
-      <p class="xf-hint" id="xfDoneBackup"></p>
-    </div>
-  </div>
-  <footer class="sheet-foot">
-    <span class="spacer"></span>
-    <button class="btn" type="button" id="xfAgain" hidden>Make another</button>
-    <button class="btn" type="button" data-close id="xfCancel">Cancel</button>
-    <button class="btn btn-primary" id="xfRun" type="button" disabled>Make new save</button>
-  </footer>
-</section>
-
-<!-- Deleted mods (the in-app trash) -->
-<section id="trashSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="trTitle" hidden>
-  <header class="sheet-head">
-    <div>
-      <h2 class="sheet-title" id="trTitle">Deleted mods</h2>
-      <p class="sheet-sub" id="trSub">Kept here until you empty the trash.</p>
-    </div>
-    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
-  </header>
-  <div class="sheet-body" id="trBody"></div>
-  <footer class="sheet-foot">
-    <span class="spacer"></span>
-    <button class="btn btn-danger" id="trEmpty" type="button">Empty trash…</button>
-  </footer>
-</section>
-
-<!-- Setup history (snapshots) -->
-<section id="historySheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="hsTitle" hidden>
-  <header class="sheet-head">
-    <div>
-      <h2 class="sheet-title" id="hsTitle">Setup history</h2>
-      <p class="sheet-sub" id="hsSub">A setup is saved every time you apply. Restore one to get that list of mods back.</p>
-    </div>
-    <button class="btn btn-icon btn-close" type="button" data-close aria-label="Close"><span data-icon="close" data-size="18"></span></button>
-  </header>
-  <div class="sheet-body" id="hsBody"></div>
-</section>
-
 <!-- Move a mod to another category -->
 <section id="groupSheet" class="sheet sheet-sm" role="dialog" aria-modal="true" aria-labelledby="gpTitle" hidden>
   <header class="sheet-head">
@@ -324,7 +352,6 @@
 <section id="dialog" class="sheet sheet-dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle" hidden></section>
 
 <div id="profileMenu" class="popover" role="menu" aria-label="Profiles" hidden></div>
-<div id="moreMenu" class="popover" role="menu" aria-label="More actions" hidden></div>
 <div id="rowMenu" class="popover" role="menu" aria-label="Mod actions" hidden></div>
 
 <div id="drop" class="drop" hidden aria-hidden="true">

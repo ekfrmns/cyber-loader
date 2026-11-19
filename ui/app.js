@@ -3,11 +3,15 @@ import { pref } from './prefs.js';
 import { api, initApi, apiMode, mockModule } from './api.js';
 import { animate, set, current } from './spring.js';
 import { icon, hydrateIcons } from './icons.js';
+import { createColorPicker } from './colorpicker.js';
+import { themedSelect } from './select.js';
+import { logoSvg } from './logo.js';
 import { openModal, openPopover, closePopovers, closeTop, hasModal, isOpen, toast, announce, dialog, esc, setFallbackFocus } from './ui.js';
 
 const GROUPS = ['Framework', 'Body', 'Characters', 'Clothing', 'Gameplay', 'Content', 'Other'];
+// Pink first: it is the default accent, so the list starts with the colour you get out of the box.
 const ACCENTS = [
-  ['Blue', '#0A84FF'], ['Purple', '#BF5AF2'], ['Pink', '#FF375F'], ['Orange', '#FF9F0A'],
+  ['Pink', '#FF375F'], ['Blue', '#0A84FF'], ['Purple', '#BF5AF2'], ['Orange', '#FF9F0A'],
   ['Yellow', '#FCEE0A'], ['Green', '#30D158'], ['Teal', '#40C8E0'], ['Graphite', '#8E8E93'],
 ];
 const DEFAULT_SETTINGS = { theme: 'dark', accent: '#FF375F' };
@@ -36,6 +40,8 @@ const S = {
   lastJson: '',
   applyTotals: null,
   settings: { ...DEFAULT_SETTINGS, ...LS.get('cmm.settings', {}) },
+  page: 'mods',             // which page of the side bar is showing
+  cat: '',                  // Library: the category last picked on the left ('' = All mods)
 };
 
 // ---------- helpers ----------
@@ -124,6 +130,7 @@ function applyTheme(animated) {
     root.style.setProperty('--on-accent', v.on);
     root.style.setProperty('--accent-text', v.text);
     root.style.setProperty('--accent-edge', v.edge);
+    $('#railLogo').innerHTML = logoSvg(accent, 26);   // the logo follows the accent, live while the colour picker is dragged
     syncHostBackground();
   };
   if (animated && document.startViewTransition && !document.hidden) document.startViewTransition(run);
@@ -200,6 +207,7 @@ async function setupHost() {
 // ---------- rendering ----------
 function render() {
   renderHeader();
+  if (S.page === 'profiles') renderProfilesPage();
   renderBanner();
   renderList();
   renderBar();
@@ -207,21 +215,143 @@ function render() {
 
 function renderHeader() {
   const st = S.st;
-  $('#profileName').textContent = st ? st.profile || 'No profile' : '…';
-  $('#profileBtn').title = st?.profile || '';
+  const ready = !!st && S.status === 'ready';
+  const name = st ? st.profile || 'No profile' : '…';
+  $('#profileName').textContent = name;
+  $('#profileBtn').title = st?.profile ? `Active profile: ${st.profile}. Click to switch.` : '';
+  $('#profInitial').textContent = (st?.profile || '?').trim().slice(0, 1).toUpperCase();
   const chip = $('#gameChip');
   const isRun = running();
   chip.classList.toggle('is-running', isRun);
+  chip.classList.toggle('is-lost', S.status === 'error' && !st);
+  chip.classList.toggle('is-checking', !st && S.status !== 'error');
   chip.querySelector('.chip-label').textContent = S.status === 'error' && !st ? 'Not connected' : !st ? 'Checking…' : isRun ? 'Game running' : 'Game closed';
-  if (chip.tagName !== 'BUTTON') chip.title = chip.textContent.trim();   // the label is hidden at narrow widths
+  if (chip.tagName !== 'BUTTON') chip.title = chip.textContent.trim();
   if (chip.tagName === 'BUTTON') chip.setAttribute('aria-label', `${isRun ? 'Game running' : 'Game closed'}. Demo: click to simulate the game ${isRun ? 'closing' : 'starting'}.`);
-  const sub = $('#pageSub');
-  if (st && S.status === 'ready') {
-    const on = st.mods.filter((m) => m.enabled).length;
-    sub.textContent = `${nf.format(on)} of ${plural(st.mods.length, 'mod')} on · ${plural(st.deployedCount || 0, 'file')} in the game folder now`
-      + (st.game?.version ? ` · Game ${st.game.version}` : '');
-    if (st.game?.updated) sub.title = `Cyberpunk ${st.game.version || ''} updated ${st.game.updated}`.replace('  ', ' ');
-  } else sub.innerHTML = '&nbsp;';
+  const p = pending();
+  const total = ready ? st.mods.length : 0;
+  const on = ready ? st.mods.filter((m) => m.enabled).length : 0;
+  $('#railProfOn').textContent = ready ? `${nf.format(on)} of ${nf.format(total)} mods on` : '\u00a0';
+  $('#railMeter').style.width = total ? `${Math.round((on / total) * 100)}%` : '0';
+  $('#railProfWait').textContent = ready && p.total ? `${nf.format(p.total)} waiting` : '';
+  $('#rnModsSub').textContent = ready ? `${nf.format(total)} mods · ${nf.format(libGroups().length)} categories` : '\u00a0';
+  const pend = $('#rnPend');
+  pend.hidden = !(ready && p.total);
+  pend.textContent = p.total;
+  pend.title = `${plural(p.total, 'change')} waiting`;
+  $('#rnProfSub').textContent = ready ? plural((st.profiles || []).length, 'profile') : '\u00a0';
+  $('#gameVer').innerHTML = ready && st.game?.version ? `Game ${esc(st.game.version)}${st.game.updated ? ` · updated ${esc(fmtDay(st.game.updated))}` : ''}` : '&nbsp;';
+  $('#railSaves').hidden = !st?.saveTransfer;
+  renderStrip();
+  renderCats();
+  movePills();
+}
+
+// ---------- Side bar, strip, pages ----------
+const PAGE_LABEL = { mods: 'Mods · Library', profiles: 'Mods · Profiles', runs: 'Saves · Runs', characters: 'Saves · Characters', history: 'Safety · History and trash', settings: 'App · Settings' };
+const PAGE_LINE = {
+  profiles: 'A profile is a saved list of which mods are on.',
+  runs: 'A run is one playthrough. Names stay in Cyber Loader. The game itself is never changed.',
+  characters: 'Pick a character on the left, then choose what to do. Your saves are never changed.',
+  history: 'A setup is saved every time you apply. Deleted mods wait here until you empty the trash.',
+  settings: 'Game folder, theme and colour.',
+};
+function renderStrip() {
+  const st = S.st;
+  $('#stripT').textContent = PAGE_LABEL[S.page] || '';
+  let line = PAGE_LINE[S.page] || '';
+  if (S.page === 'mods') {
+    line = st && S.status === 'ready'
+      ? `${nf.format(st.mods.filter((m) => m.enabled).length)} of ${plural(st.mods.length, 'mod')} on · ${plural(st.deployedCount || 0, 'file')} in the game folder now`
+      : '\u00a0';
+  }
+  $('#stripS').textContent = line;
+}
+
+// The highlight in the side bar slides to the page you are on (220ms). Instant on the first paint and with reduced motion.
+function movePills() {
+  for (const set of document.querySelectorAll('.rail-set')) {
+    const pill = set.querySelector('.rail-pill'), on = set.querySelector('.rn.is-on');
+    if (!pill) continue;
+    if (!on || !set.offsetParent) { pill.style.opacity = '0'; continue; }
+    const first = !pill.dataset.placed;
+    if (first) pill.style.transition = 'none';
+    pill.style.opacity = '1';
+    pill.style.transform = `translateY(${on.offsetTop}px)`;
+    if (first) { pill.dataset.placed = '1'; pill.getBoundingClientRect(); pill.style.transition = ''; }
+  }
+}
+
+const PAGE_TIPS = {
+  mods: ['Library', 'Every mod you have, in categories. Turn them on or off here.'],
+  profiles: ['Profiles', 'Save different sets of mods and switch between them.'],
+  runs: ['Runs', 'Your playthroughs. Give them names and see their saves.'],
+  characters: ['Characters', 'Change a look, money or clothes, or copy from another run.'],
+  history: ['History and trash', 'Go back to an earlier setup or bring a deleted mod back.'],
+  settings: ['Settings', 'Game folder, theme and colour.'],
+};
+const BUILT_PAGES = new Set(['mods', 'settings', 'history', 'profiles', 'runs', 'characters']);   // pages that live in the window; the rest still open their old windows until they are moved in
+
+function setupRail() {
+  document.querySelectorAll('.rn[data-page]').forEach((el, i) => {
+    const [t, sub] = PAGE_TIPS[el.dataset.page];
+    const tip = document.createElement('span');
+    tip.className = 'tip'; tip.setAttribute('role', 'tooltip'); tip.id = `tip${i}`;
+    tip.innerHTML = `<b>${esc(t)}</b><span>${esc(sub)}</span>`;
+    el.appendChild(tip);
+    el.setAttribute('aria-describedby', tip.id);
+    el.addEventListener('click', () => showPage(el.dataset.page, el));
+  });
+  addEventListener('resize', movePills);
+}
+
+function showPage(id, trigger) {
+  S.page = id;
+  if (id === 'history') showHistoryPage();
+  if (id === 'runs' || id === 'characters') showSavesPage(id);
+  if (id === 'profiles') { PR.sel = S.st?.profile || PR.sel; renderProfilesPage(); }
+  if (id === 'settings') { syncSettingsForm(); loadGameFolder().catch((e) => toast(e.message, { tone: 'error', timeout: 5000 })); }
+  for (const page of document.querySelectorAll('.page')) page.hidden = page.id !== `page-${id}`;
+  for (const rn of document.querySelectorAll('.rn[data-page]')) {
+    const on = rn.dataset.page === id;
+    rn.classList.toggle('is-on', on);
+    if (on) rn.setAttribute('aria-current', 'page'); else rn.removeAttribute('aria-current');
+  }
+  renderStrip();
+  movePills();
+}
+
+// ---------- Library: the list on the left jumps to a section of the long list ----------
+const libGroups = () => GROUPS.filter((g) => mods().some((m) => (GROUPS.includes(m.group) ? m.group : 'Other') === g));
+function renderCats() {
+  const box = $('#cats');
+  if (!box) return;
+  const all = mods();
+  if (S.status !== 'ready' || !all.length) { box.innerHTML = ''; return; }
+  const items = [{ g: '', name: 'All mods', ic: 'mods', on: all.filter((m) => m.enabled).length, total: all.length },
+    ...libGroups().map((g) => {
+      const gm = all.filter((m) => (GROUPS.includes(m.group) ? m.group : 'Other') === g);
+      return { g, name: g, ic: GROUP_ICON[g] || 'other', on: gm.filter((m) => m.enabled).length, total: gm.length };
+    })];
+  const sig = items.map((i) => `${i.g}|${i.on}|${i.total}`).join(';') + `|${S.cat}`;
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  box.innerHTML = items.map((i) => `<button class="pick-item${i.g === S.cat ? ' is-on' : ''}" type="button" data-cat="${esc(i.g)}"${i.g === S.cat ? ' aria-current="true"' : ''}>
+    <span class="avatar">${icon(i.ic, 19)}</span>
+    <span class="rl-text"><span class="rl-name">${esc(i.name)}</span><span class="rl-meta">${nf.format(i.on)} of ${nf.format(i.total)} on</span></span></button>`).join('');
+}
+
+// A category opens and every other closes (All mods opens everything), then the list jumps to it.
+function jumpCat(g) {
+  if (S.query) { S.query = ''; $('#search').value = ''; }
+  S.cat = g;
+  S.collapsed = g ? new Set(GROUPS.filter((x) => x !== g)) : new Set();
+  LS.set('cmm.collapsed', [...S.collapsed]);
+  renderList();
+  renderCats();
+  const sc = $('#scroller');
+  const sec = g ? $('#list').querySelector(`.group[data-group="${g}"]`) : null;
+  sc.scrollTop = sec ? sec.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop : 0;
 }
 
 function bannerContent() {
@@ -420,7 +550,7 @@ function renderList() {
       if (!gm.length) return;
       const collapsed = S.collapsed.has(g);
       const gs = groupStats(gm);
-      html += `<section class="group">
+      html += `<section class="group" data-group="${g}">
         <h2 class="group-head"><button class="group-toggle" type="button" data-nav data-key="group:${g}" data-group="${g}" tabindex="-1" aria-expanded="${!collapsed}" aria-controls="grp-${gi}">
           <span class="group-icon">${icon(GROUP_ICON[g] || 'other', 18)}</span>
           <span class="group-text"><span class="group-name">${g}</span><span class="group-count">${gs.html}</span></span>
@@ -799,16 +929,9 @@ function renderProfileMenu() {
     ? `<div class="menu-sep" role="separator"></div>
        <button class="menu-item" type="button" role="menuitem" data-profile-act="save" data-profile="${esc(st.profile)}" tabindex="-1">${icon('save', 18)}<span class="label"><span>Save changes to “${esc(st.profile)}”</span></span></button>`
     : '';
-  menu.innerHTML = rows + save;
-}
-
-// The "..." menu is only for app-level things; everything about profiles lives in the profile menu and the "+" button.
-function renderMoreMenu() {
-  const item = (act, ic, label) =>
-    `<button class="menu-item" type="button" role="menuitem" data-act="${act}" tabindex="-1">${icon(ic, 18)}<span class="label"><span>${esc(label)}</span></span></button>`;
-  $('#moreMenu').innerHTML = [item('history', 'restore', 'Setup history…'), item('trash', 'trash', 'Deleted mods…'),
-    ...(S.st?.saveTransfer ? [item('transfer', 'characters', 'Change or move a character…')] : []),
-    item('game', 'folder', 'Game folder…'), item('appearance', 'appearance', 'Appearance…')].join('');
+  const add = `<div class="menu-sep" role="separator"></div>
+       <button class="menu-item" type="button" role="menuitem" data-profile-act="new" tabindex="-1">${icon('plus', 18)}<span class="label"><span>New profile…</span></span></button>`;
+  menu.innerHTML = rows + save + add;
 }
 
 // ---------- Game folder: see it, and change it (the engine refuses while mods are placed, the game runs, or an apply runs) ----------
@@ -821,6 +944,7 @@ function gfGameLine(g) {
 
 function gfRender() {
   const i = gf.info;
+  if (!i) return;
   $('#gfPath').textContent = i.path || 'Not set';
   const line = i.found ? gfGameLine(i) : '';
   $('#gfStatus').innerHTML = i.found
@@ -871,7 +995,7 @@ function gfOnInput() {
   gf.timer = setTimeout(gfRunCheck, 250);
 }
 
-async function openGameFolder(trigger) {
+async function loadGameFolder() {
   gf.info = await api.get('/api/game-folder');
   gf.check = null;
   gf.busy = false;
@@ -879,7 +1003,6 @@ async function openGameFolder(trigger) {
   clearTimeout(gf.timer);
   $('#gfInput').value = '';
   gfRender();
-  openModal($('#gameSheet'), { trigger, initialFocus: gf.info.canChange ? '#gfInput' : '[data-close]' });
 }
 
 async function gfBrowse() {
@@ -898,20 +1021,22 @@ async function gfSave() {
   gfRender();
   try {
     const r = await api.post('/api/game-folder', { path: c.path });
-    closeTop();
+    $('#gfInput').value = '';
+    gf.check = null;
     toast(r.changed ? 'Game folder changed. Nothing was moved or deleted.' : 'That folder is already in use.', { tone: 'ok' });
     try { await refresh(); } catch { /* the next poll picks the new state up */ }
+    try { gf.info = await api.get('/api/game-folder'); } catch { /* keep what is shown */ }
   } catch (e) {
     toast(e.message, { tone: 'error', timeout: 7000 });
     try { gf.info = await api.get('/api/game-folder'); } catch { /* keep what is shown */ }
   } finally {
     gf.busy = false;
-    if (isOpen($('#gameSheet'))) gfRender();
+    gfRender();
   }
 }
 
 // ---------- Change or move a character between saves (optional add-on; the engine makes a NEW save and never changes the others) ----------
-const xf = { list: null, pts: [], pick: { source: null, target: null }, save: { source: {}, target: {} }, info: new Map(), pseq: 0, timer: null, busy: false, report: null, checking: false, error: '', since: 0, tick: null };
+const xf = { avail: null, list: null, pts: [], pick: { source: null, target: null }, save: { source: {}, target: {} }, info: new Map(), pseq: 0, timer: null, busy: false, report: null, checking: false, error: '', since: 0, tick: null };
 const xfStamp = (sec) => new Date(sec * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const xfLabel = (s) => [s.id, s.bodyGender ? `${s.bodyGender.toLowerCase()} V` : '', s.level ? `level ${s.level}` : '',
   s.hours != null ? `${s.hours} h` : '', s.savedAt ? xfStamp(s.savedAt) : ''].filter(Boolean).join(' · ');
@@ -923,20 +1048,43 @@ const xfPtMeta = (g) => [plural(g.count, 'save'), g.bodies.length ? `${g.bodies.
   g.hours != null ? `${g.hours} h` : '', `last played ${xfStamp(g.last)}`].filter(Boolean).join(' · ');
 const xfSaveText = (x, latest) => [x.label + (latest ? ' (latest)' : ''), x.bodyGender ? `${x.bodyGender.toLowerCase()} V` : '', x.hours != null ? `${x.hours} h` : '', x.savedAt ? xfStamp(x.savedAt) : ''].filter(Boolean).join(' · ');
 
-function xfRenderSide(side) {
-  const box = $(side === 'source' ? '#xfSourceList' : '#xfTargetList');
-  const name = `xfPt-${side}`;
-  box.innerHTML = xf.pts.map((g) => {
-    const on = g.id === xf.pick[side];
-    const chosen = xf.save[side][g.id] || g.saves[0];
-    const opts = g.saves.map((id, i) => { const x = xfSaveById(id); return `<option value="${esc(id)}" ${id === chosen ? 'selected' : ''}>${esc(xfSaveText(x, i === 0))}</option>`; }).join('');
-    return `<div class="xf-pt${on ? ' is-on' : ''}">
-      <label class="xf-pt-head"><input type="radio" name="${name}" value="${esc(g.id)}" ${on ? 'checked' : ''}>
-        <span class="xf-pt-main"><b>${esc(xfPtName(g))}</b><small>${esc(xfPtMeta(g))}</small></span></label>
-      <button class="btn btn-icon xf-rename" type="button" data-rename="${esc(g.id)}" aria-label="Rename “${esc(xfPtName(g))}”" title="Rename">${icon('pencil', 16)}</button>
-      ${on ? `<label class="xf-pt-save"><span>Save</span><select data-xf-save="${side}" aria-label="Save in ${esc(xfPtName(g))}">${opts}</select></label>` : ''}
-    </div>`;
+function xfSaveOptions(g, chosen) {
+  return g.saves.map((id, i) => {
+    const x = xfSaveById(id);
+    const name = x.label + (i === 0 ? ' (latest)' : '');
+    const detail = [x.bodyGender ? `${x.bodyGender.toLowerCase()} V` : '', x.hours != null ? `${x.hours} h` : '', x.savedAt ? xfStamp(x.savedAt) : ''].filter(Boolean).join(' · ');
+    return `<option value="${esc(id)}" data-name="${esc(name)}" data-detail="${esc(detail)}" ${id === chosen ? 'selected' : ''}>${esc(xfSaveText(x, i === 0))}</option>`;
   }).join('');
+}
+
+function fillSelect(sel, html) { sel.innerHTML = html; themedSelect(sel).refresh(); }
+
+function xfRenderSide(side) {
+  if (side === 'target') {
+    // The runs on the left: pick the character you want to change.
+    $('#xfTargetList').innerHTML = xf.pts.map((g) => {
+      const on = g.id === xf.pick.target;
+      return `<div class="pick-item${on ? ' is-on' : ''}" role="option" aria-selected="${on}" tabindex="0" data-pt="${esc(g.id)}">
+        <span class="avatar">${esc(xfPtName(g).trim().slice(0, 1).toUpperCase())}</span>
+        <span class="rl-text"><span class="rl-name">${esc(xfPtName(g))}</span><span class="rl-meta">${esc(xfPtMeta(g).split(' · ').slice(0, 3).join(' · '))}</span></span>
+        <span class="ib-row"><button class="ib" type="button" data-rename="${esc(g.id)}" aria-label="Rename “${esc(xfPtName(g))}”" title="Rename">${icon('pencil', 16)}</button></span></div>`;
+    }).join('');
+    const g = xfPt(xf.pick.target);
+    if (g) {
+      $('#xfName').textContent = xfPtName(g);
+      $('#xfMeta').textContent = xfPtMeta(g);
+      fillSelect($('#xfTargetSave'), xfSaveOptions(g, xf.save.target[g.id] || g.saves[0]));
+    }
+    return;
+  }
+  const name = 'xfPt-source';
+  $('#xfSourceList').innerHTML = xf.pts.map((g) => {
+    const on = g.id === xf.pick.source;
+    return `<label class="xf-pt${on ? ' is-on' : ''}"><input type="radio" name="${name}" value="${esc(g.id)}" ${on ? 'checked' : ''}>
+      <span class="xf-pt-main"><b>${esc(xfPtName(g))}</b></span></label>`;
+  }).join('');
+  const g = xfPt(xf.pick.source);
+  if (g) fillSelect($('#xfSourceSave'), xfSaveOptions(g, xf.save.source[g.id] || g.saves[0]));
 }
 
 async function xfRename(pid, trigger) {
@@ -949,6 +1097,7 @@ async function xfRename(pid, trigger) {
     const res = await api.post('/api/savetransfer/name', { playthrough: pid, name: r.value });
     g.name = res.name;
     xfRenderSide('source'); xfRenderSide('target');
+    renderRunsPage();
   } catch (e) {
     toast(e.message, { tone: 'error', timeout: 6000 });
   }
@@ -1023,32 +1172,43 @@ function xfSummary(o) {
   return { text, bad: false, ok: !!something };
 }
 
+function xfRenderTiles(o) {
+  const i = xf.info.get(o.target);
+  const c = i?.counts || {};
+  const cell = (n, l) => `<div class="tile"><b>${n}</b><span>${l}</span></div>`;
+  $('#xfTiles').innerHTML = !i ? [cell('…', 'clothes'), cell('…', 'guns'), cell('…', 'outfits'), cell('…', 'money')].join('')
+    : i.error ? `<p class="note-card" style="grid-column:1/-1;margin:0">${esc(i.error)}</p>`
+    : [cell(nf.format(c.clothes ?? 0), `clothes${c.modItems ? ` · +${nf.format(c.modItems)} mod items` : ''}`), cell(nf.format(c.guns ?? 0), 'guns'), cell(nf.format(c.outfits ?? 0), 'outfits'), cell(c.money != null ? nf.format(c.money) : '–', 'money')].join('');
+}
+
 function xfRender() {
   const o = xfGet();
   $('#xfGame').hidden = !running();
   const needs = xfNeedsSource(o);
-  const side = $('#xfSourceList').closest('fieldset');
-  side.classList.toggle('xf-off', !needs);
-  side.inert = !needs;
+  const box = $('#xfSourceBox');
+  box.classList.toggle('xf-off', !needs);
+  box.inert = !needs;
   $('#xfSourceHint').textContent = needs ? xfInfoText(o.source) : 'Not needed: a gender change only uses the save you put it on.';
-  $('#xfTargetHint').textContent = xfInfoText(o.target);
+  xfRenderTiles(o);
+  const nChange = (o.gender !== 'keep') + (o.money !== null) + !!o.tidy + !!o.stripMods;
+  const nCopy = !!o.look + !!o.clothes + !!o.outfits + !!o.guns;
+  for (const [id, n] of [['#xfCntChange', nChange], ['#xfCntCopy', nCopy]]) { $(id).hidden = !n; $(id).textContent = n; }
   const s = xfSummary(o);
   const sum = $('#xfSum');
   const working = xf.busy || !!s.busy;
-  const msg = xf.busy ? 'Making the new save. This can take a minute or two; keep this window open.' : s.text;
+  const msg = xf.busy ? 'Making the new save. This can take a minute or two. Keep the app open.' : s.text;
   sum.classList.toggle('is-bad', !!s.bad && !xf.busy);
   sum.classList.toggle('is-busy', working);
   if (working) {
     if (sum.dataset.busy !== msg) {
       sum.dataset.busy = msg;
-      sum.innerHTML = `<span class="xf-spin" aria-hidden="true"></span><span>${esc(msg)} <span class="xf-elapsed" id="xfElapsed"></span></span>`;
+      sum.innerHTML = `<span class="xf-spin" aria-hidden="true" style="display:inline-block;vertical-align:-3px;margin-right:8px"></span><span>${esc(msg)} <span class="xf-elapsed" id="xfElapsed"></span></span>`;
       xf.since = Date.now();
-      sum.scrollIntoView({ block: 'nearest', behavior: pref.reduceMotion ? 'auto' : 'smooth' });
     }
     if (!xf.tick) xf.tick = setInterval(xfTick, 1000);
   } else {
     delete sum.dataset.busy;
-    sum.textContent = s.text;
+    sum.textContent = s.text || 'Tick what to change, then make the new save.';
     clearInterval(xf.tick); xf.tick = null;
   }
   $('#xfCheck').hidden = !(s.canCheck && !xf.busy);
@@ -1067,7 +1227,7 @@ async function xfInspect(id) {
   if (!id || xf.info.has(id)) return;
   try { xf.info.set(id, await api.post('/api/savetransfer/inspect', { save: id })); }
   catch (e) { xf.info.set(id, { error: e.message }); }
-  if (isOpen($('#xferSheet'))) xfRender();
+  if (S.page === 'characters') xfRender();
 }
 
 async function xfPreview() {
@@ -1103,36 +1263,118 @@ function xfChanged() {
 
 function xfShowForm(on) {
   if (!on) { clearInterval(xf.tick); xf.tick = null; }
-  $('#xfForm').hidden = !on;
+  $('#xfMain').hidden = !on;
   $('#xfDone').hidden = on;
-  $('#xfRun').hidden = !on;
-  $('#xfAgain').hidden = on;
-  $('#xfCancel').textContent = on ? 'Cancel' : 'Close';
-  $('#xfSub').hidden = !on;
 }
 
-async function openTransfer(trigger) {
+// The saves the save tool found. Both the Runs and the Characters page read this.
+async function loadSaves() {
   const v = await api.get('/api/savetransfer');
-  if (!v.available) { toast(v.reason || 'The save transfer add-on is not installed.', { tone: 'error', timeout: 6000 }); return; }
-  if (!v.saves.length) { toast(v.reason || 'No saves were found in the game’s saves folder.', { tone: 'error', timeout: 6000 }); return; }
+  xf.avail = v;
+  if (!v.available || !v.saves.length) { xf.list = []; xf.pts = []; return v; }
+  const fresh = !xf.pts.length;
   xf.list = v.saves;
   xf.pts = v.playthroughs;
-  xf.info = new Map();
-  xf.report = null;
-  xf.checking = false;
-  xf.busy = false;
-  xf.save = { source: {}, target: {} };
-  // First playthrough = the one played last. Put-it-on starts on the next playthrough if there is one.
-  xf.pick = { source: xf.pts[0].id, target: (xf.pts[1] || xf.pts[0]).id };
-  xf.save.target[xf.pick.target] = xf.pts[1] ? xf.pts[1].saves[0] : (xf.pts[0].saves[1] || xf.pts[0].saves[0]);
-  xfRenderSide('source'); xfRenderSide('target');
-  $('#xfForm input[name="xfGender"][value="keep"]').checked = true;
-  for (const id of ['#xfLook', '#xfClothes', '#xfOutfits', '#xfGuns', '#xfTidy', '#xfStrip']) $(id).checked = false;
-  $('#xfMoney').value = '';
-  xfShowForm(true);
+  if (fresh || !xfPt(xf.pick.target) || !xfPt(xf.pick.source)) {
+    xf.info = new Map(); xf.report = null; xf.checking = false; xf.busy = false; xf.save = { source: {}, target: {} };
+    // First playthrough = the one played last. The character to change starts on the next one if there is one.
+    xf.pick = { source: xf.pts[0].id, target: (xf.pts[1] || xf.pts[0]).id };
+    xf.save.target[xf.pick.target] = xf.pts[1] ? xf.pts[1].saves[0] : (xf.pts[0].saves[1] || xf.pts[0].saves[0]);
+  }
+  return v;
+}
+
+function savesUnavailable() {
+  const v = xf.avail;
+  if (!v) return 'Looking for your saves…';
+  if (!v.available) return v.reason || 'The save tool is not installed.';
+  if (!v.saves.length) return v.reason || 'No saves were found in the game’s saves folder.';
+  return '';
+}
+
+function renderRunsPage() {
+  const msg = savesUnavailable();
+  const list = $('#runList'), detail = $('#runDetail');
+  if (msg) { list.innerHTML = ''; detail.innerHTML = `<div class="detail-head"><div><h2>Runs</h2><p>${esc(msg)}</p></div></div>`; return; }
+  list.innerHTML = xf.pts.map((g) => {
+    const on = g.id === xf.pick.target;
+    return `<div class="pick-item${on ? ' is-on' : ''}" role="option" aria-selected="${on}" tabindex="0" data-pt="${esc(g.id)}">
+      <span class="avatar">${esc(xfPtName(g).trim().slice(0, 1).toUpperCase())}</span>
+      <span class="rl-text"><span class="rl-name">${esc(xfPtName(g))}${g.name ? '' : '<span class="tag2 quiet">Unnamed</span>'}</span><span class="rl-meta">${esc(xfPtMeta(g).split(' · ').slice(0, 4).join(' · '))}</span></span>
+      <span class="ib-row"><button class="ib" type="button" data-rename="${esc(g.id)}" aria-label="Rename “${esc(xfPtName(g))}”" title="Rename">${icon('pencil', 16)}</button></span></div>`;
+  }).join('');
+  const g = xfPt(xf.pick.target);
+  const saves = g.saves.map((id) => xfSaveById(id)).filter(Boolean);
+  const maxH = Math.max(1, ...saves.map((x) => x.hours || 0));
+  const shown = saves.slice(0, 8);
+  detail.innerHTML = `<div class="detail-head"><div><h2>${esc(xfPtName(g))}</h2><p>Last played ${esc(xfStamp(g.last))}</p></div>
+      <button class="btn" type="button" data-run-act="rename">${icon('pencil', 16)}Rename</button></div>
+    <div class="tiles"><div class="tile"><b>${nf.format(g.count)}</b><span>${g.count === 1 ? 'save' : 'saves'}</span></div>
+      <div class="tile"><b>${g.level != null ? nf.format(g.level) : '–'}</b><span>level</span></div>
+      <div class="tile"><b>${g.hours != null ? `${nf.format(g.hours)} h` : '–'}</b><span>played</span></div>
+      <div class="tile"><b>${g.bodies.length ? esc(g.bodies.map((x) => x[0].toUpperCase() + x.slice(1).toLowerCase()).join(' and ')) : '–'}</b><span>V</span></div></div>
+    <h3>Playtime across saves</h3>
+    <div class="grow">${shown.map((x, i) => `<div class="hbar"><b title="${esc(x.label)}">${esc(x.label)}${i === 0 ? ' (latest)' : ''}</b><span class="track"><i style="width:${Math.round(((x.hours || 0) / maxH) * 100)}%"></i></span><span class="h">${x.hours != null ? `${nf.format(x.hours)} h` : ''}</span><span class="d">${x.savedAt ? esc(xfStamp(x.savedAt)) : ''}</span></div>`).join('')}
+      ${saves.length > shown.length ? `<div class="hbar more"><b style="width:auto;font-weight:500;color:var(--text-3)">and ${plural(saves.length - shown.length, 'older save')}</b></div>` : ''}</div>
+    <div class="detail-actions"><button class="btn btn-primary" type="button" data-run-act="change">${icon('characters', 16)}Change this character…</button></div>`;
+}
+
+function renderCharactersPage() {
+  const msg = savesUnavailable();
+  $('#xfMain').hidden = !!msg || !$('#xfDone').hidden;
+  if (msg) {
+    $('#xfTargetList').innerHTML = '';
+    $('#xfDone').hidden = false;
+    $('#xfDoneTitle').textContent = 'Characters';
+    $('#xfDoneText').textContent = msg;
+    $('#xfDoneBackup').textContent = '';
+    $('#xfAgain').hidden = true;
+    return;
+  }
+  $('#xfAgain').hidden = false;
+  xfRenderSide('target'); xfRenderSide('source');
   xfRender();
-  openModal($('#xferSheet'), { trigger, initialFocus: '#xfSourceList input:checked' });
-  xfChanged();
+}
+
+async function showSavesPage(id) {
+  try { await loadSaves(); }
+  catch (e) { xf.avail = { available: false, saves: [], reason: e.message }; }
+  if (id === 'runs') renderRunsPage();
+  else { renderCharactersPage(); if (!savesUnavailable()) xfChanged(); }
+}
+
+function wireSavesPages() {
+  const pick = (el, then) => { xf.pick.target = el.dataset.pt; xf.report = null; renderRunsPage(); if (S.page === 'characters') { renderCharactersPage(); xfChanged(); } then?.(); };
+  for (const id of ['#runList', '#xfTargetList']) {
+    $(id).addEventListener('click', (e) => {
+      const r = e.target.closest('[data-rename]');
+      if (r) { xfRename(r.dataset.rename, r); return; }
+      const item = e.target.closest('[data-pt]');
+      if (item) { pick(item); $(`${id} .is-on`)?.focus({ preventScroll: true }); }
+    });
+    $(id).addEventListener('keydown', (e) => {
+      const item = e.target.closest('[data-pt]');
+      if (!item || e.target !== item) return;
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(item); $(`${id} .is-on`)?.focus({ preventScroll: true }); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const all = [...$(id).querySelectorAll('[data-pt]')], i = all.indexOf(item) + (e.key === 'ArrowDown' ? 1 : -1);
+        if (all[i]) { e.preventDefault(); all[i].focus(); }
+      }
+    });
+  }
+  $('#runDetail').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-run-act]');
+    if (!b) return;
+    if (b.dataset.runAct === 'rename') xfRename(xf.pick.target, b);
+    else showPage('characters');
+  });
+  themedSelect($('#xfTargetSave')); themedSelect($('#xfSourceSave'));
+  $('#xfTabs').addEventListener('change', (e) => {
+    if (e.target.name !== 'xfTab') return;
+    const copy = e.target.value === 'copy';
+    $('#xfPanelChange').hidden = copy;
+    $('#xfPanelCopy').hidden = !copy;
+  });
 }
 
 async function xfAgain() {
@@ -1146,9 +1388,9 @@ async function xfAgain() {
   } catch { /* keep the list we have */ }
   xf.info = new Map();
   xfShowForm(true);
-  xfRenderSide('source'); xfRenderSide('target');
+  renderCharactersPage();
   xfChanged();
-  $('#xfSourceList input:checked')?.focus();
+  $('#xfTargetList .is-on')?.focus();
 }
 
 async function xfRun() {
@@ -1180,7 +1422,7 @@ async function xfRun() {
     toast(e.message, { tone: 'error', timeout: 8000 });
   } finally {
     xf.busy = false;
-    if (isOpen($('#xferSheet')) && !$('#xfForm').hidden) xfRender();
+    if (S.page === 'characters' && !$('#xfMain').hidden) xfRender();
   }
 }
 
@@ -1206,60 +1448,34 @@ async function deleteMod(id, trigger) {
   }
 }
 
-function trashHTML(t) {
-  const sub = $('#trSub');
-  const n = t.items.length;
-  sub.textContent = n ? `${n} ${n === 1 ? 'mod' : 'mods'} · ${fmtSize(t.totalSize)}. Kept here until you empty the trash.` : 'Kept here until you empty the trash.';
-  $('#trEmpty').toggleAttribute('hidden', !n);
-  if (!n) return '<p class="trash-empty">Nothing in the trash.</p>';
-  return `<div class="trash-list">${t.items.map((i) => `
-    <div class="trash-row" data-trash="${esc(i.id)}">
-      <div class="trash-text"><div class="trash-name" title="${esc(i.name)}">${esc(i.name)}</div>
-        <div class="trash-meta">${plural(i.files, 'file')} · ${fmtSize(i.size)} · deleted ${esc(i.deletedAt)}</div></div>
-      <div class="trash-actions">
-        <button class="btn btn-quiet" type="button" data-trash-act="restore">Restore</button>
-        <button class="btn btn-quiet is-danger" type="button" data-trash-act="forever">Delete forever</button>
-      </div></div>`).join('')}</div>`;
-}
-
 async function loadTrash() {
   const t = await api.get('/api/trash');
   S.trash = t;
-  $('#trBody').innerHTML = trashHTML(t);
+  if (S.page === 'history') renderHistoryPage();
   return t;
 }
 
-async function openTrash(trigger) {
-  await loadTrash();
-  openModal($('#trashSheet'), { trigger, initialFocus: '[data-close]' });
+async function restoreTrashItem(item, trigger) {
+  try {
+    await api.post('/api/trash/restore', { id: item.id });
+    await loadTrash();
+    await refresh();
+    toast(`Restored “${item.name}”`, { tone: 'ok' });
+  } catch (err) { toast(err.message, { tone: 'error', timeout: 6000 }); }
 }
 
-async function trashClick(e) {
-  const b = e.target.closest('[data-trash-act]');
-  if (!b) return;
-  const row = b.closest('[data-trash]');
-  const item = S.trash?.items.find((i) => i.id === row.dataset.trash);
-  if (!item) return;
+async function deleteTrashItemForever(item, trigger) {
+  const r = await dialog({
+    title: `Delete “${item.name}” forever?`,
+    message: `This erases ${fmtSize(item.size)} from your computer and can’t be undone.`,
+    confirm: 'Delete forever', destructive: true, trigger,
+  });
+  if (!r) return;
   try {
-    if (b.dataset.trashAct === 'restore') {
-      await api.post('/api/trash/restore', { id: item.id });
-      await loadTrash();
-      await refresh();
-      toast(`Restored “${item.name}”`, { tone: 'ok' });
-    } else {
-      const r = await dialog({
-        title: `Delete “${item.name}” forever?`,
-        message: `This erases ${fmtSize(item.size)} from your computer and can’t be undone.`,
-        confirm: 'Delete forever', destructive: true, trigger: b,
-      });
-      if (!r) return;
-      await api.post('/api/trash/empty', { id: item.id });
-      await loadTrash();
-      toast(`Deleted “${item.name}” forever`, { tone: 'ok' });
-    }
-  } catch (err) {
-    toast(err.message, { tone: 'error', timeout: 6000 });
-  }
+    await api.post('/api/trash/empty', { id: item.id });
+    await loadTrash();
+    toast(`Deleted “${item.name}” forever`, { tone: 'ok' });
+  } catch (err) { toast(err.message, { tone: 'error', timeout: 6000 }); }
 }
 
 async function emptyTrash(trigger) {
@@ -1275,9 +1491,7 @@ async function emptyTrash(trigger) {
     await api.post('/api/trash/empty', {});
     await loadTrash();
     toast('Trash emptied', { tone: 'ok' });
-  } catch (e) {
-    toast(e.message, { tone: 'error', timeout: 6000 });
-  }
+  } catch (e) { toast(e.message, { tone: 'error', timeout: 6000 }); }
 }
 
 function openRowMenu(li, x) {
@@ -1303,37 +1517,7 @@ const fmtDay = (day) => {
   return Number.isNaN(d.getTime()) ? day : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 };
 const nexusUrl = (id) => `https://www.nexusmods.com/cyberpunk2077/mods/${id}`;
-const histOpen = new Set();   // snapshot ids whose details are showing
-
 function histTitle(i) { return i.name || `Applied ${fmtWhen(i.at)}`; }
-
-function histRowHTML(i) {
-  const bits = [];
-  if (i.name) bits.push(esc(fmtWhen(i.at)));
-  bits.push(esc(i.profile || 'No profile'), `${plural(i.count, 'mod')} on`);
-  const diff = [];
-  if (i.turnOn) diff.push(`Turns on ${plural(i.turnOn, 'mod')}`);
-  if (i.turnOff) diff.push(`Turns off ${plural(i.turnOff, 'mod')}`);
-  const flags = [];
-  if (i.missing) flags.push(`<span class="hist-flag">${plural(i.missing, 'mod')} not in your library now</span>`);
-  if (i.changed) flags.push(`<span class="hist-flag">${plural(i.changed, 'mod')} changed since</span>`);
-  const open = histOpen.has(i.id);
-  return `<div class="hist-row" data-snap="${esc(i.id)}">
-    <div class="hist-main">
-      <div class="hist-text">
-        <div class="hist-title">${esc(histTitle(i))}${i.pinned ? '<span class="needs-tag">Kept</span>' : ''}</div>
-        <div class="hist-meta">${bits.join('<span class="sep" aria-hidden="true"> · </span>')}</div>
-        <div class="hist-meta">${diff.length ? esc(diff.join(' · ')) : 'Same mods as now'}</div>
-        ${flags.length ? `<div class="hist-flags">${flags.join('')}</div>` : ''}
-      </div>
-      <div class="hist-actions">
-        <button class="btn btn-quiet" type="button" data-hist-act="details" aria-expanded="${open}">${open ? 'Hide details' : 'Details'}</button>
-        <button class="btn btn-quiet" type="button" data-hist-act="restore">Restore</button>
-      </div>
-    </div>
-    <div class="hist-detail" ${open ? '' : 'hidden'}></div>
-  </div>`;
-}
 
 function histDetailHTML(d) {
   const differs = d.mods.filter((m) => m.status !== 'same');
@@ -1354,80 +1538,195 @@ function histDetailHTML(d) {
     <p class="hist-meta">${same ? `${plural(same, 'other mod')} unchanged. ` : ''}Older setups are moved aside after the newest 200, never erased.</p>`;
 }
 
-function histBodyHTML(items) {
-  $('#hsSub').textContent = items.length
-    ? `${plural(items.length, 'setup')}. A new one is saved every time you apply.`
-    : 'A setup is saved every time you apply. Restore one to get that list of mods back.';
-  if (!items.length) return '<p class="trash-empty">Nothing yet. Your first setup is saved the next time you apply.</p>';
-  return `<div class="hist-all">${items.map(histRowHTML).join('')}</div>`;
-}
-
 async function loadHistory() {
   const r = await api.get('/api/snapshots');
   S.history = r.items;
-  $('#hsBody').innerHTML = histBodyHTML(r.items);
-  for (const id of histOpen) fillHistDetail(id);
+  if (S.page === 'history') renderHistoryPage();
   return r;
-}
-
-async function fillHistDetail(id) {
-  const row = $(`#hsBody [data-snap="${CSS.escape(id)}"]`);
-  if (!row) return;
-  const box = row.querySelector('.hist-detail');
-  try {
-    box.innerHTML = histDetailHTML(await api.get(`/api/snapshots/${id}`));
-  } catch (e) {
-    box.innerHTML = `<p class="hist-meta">${esc(e.message)}</p>`;
-  }
-}
-
-async function openHistory(trigger) {
-  histOpen.clear();
-  await loadHistory();
-  openModal($('#historySheet'), { trigger, initialFocus: '[data-close]' });
 }
 
 async function copyText(text) {
   try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
 }
 
-async function historyClick(e) {
-  const b = e.target.closest('[data-hist-act]');
-  if (!b) return;
-  const row = b.closest('[data-snap]');
-  const id = row?.dataset.snap;
-  const item = S.history?.find((i) => i.id === id);
-  const act = b.dataset.histAct;
+async function restoreSnapshot(item, trigger) {
   try {
-    if (act === 'details') {
-      const detail = row.querySelector('.hist-detail');
-      const open = detail.hidden;
-      detail.hidden = !open;
-      b.textContent = open ? 'Hide details' : 'Details';
-      b.setAttribute('aria-expanded', String(open));
-      if (open) { histOpen.add(id); detail.innerHTML = '<p class="hist-meta">Loading…</p>'; await fillHistDetail(id); } else histOpen.delete(id);
-    } else if (act === 'copy') {
-      toast((await copyText(b.dataset.url)) ? 'Link copied' : b.dataset.url, { tone: 'ok', timeout: 5000 });
-    } else if (act === 'restore' && item) {
-      const extra = item.missing ? `${plural(item.missing, 'mod')} from it ${item.missing === 1 ? 'is' : 'are'} not in your library any more and will be skipped (Details shows which).` : '';
-      const r = await dialog({
-        title: `Go back to “${histTitle(item)}”?`,
-        message: `Your mod list becomes the one from that setup. Nothing in the game changes until you review and apply. ${extra}`.trim(),
-        confirm: 'Restore', trigger: b,
-      });
-      if (!r) return;
-      const next = await api.post('/api/snapshots/restore', { id });
-      setState(next);
-      closeTop();
-      render();
-      const res = next.restored || {};
-      const skipped = res.missing?.length || 0;
-      toast(skipped ? `Restored, but ${plural(skipped, 'mod')} could not come back. Check Setup history.` : 'Restored. Review changes to apply it.',
-        { tone: skipped ? 'warn' : 'ok', timeout: 6000 });
-    }
-  } catch (err) {
-    toast(err.message, { tone: 'error', timeout: 6000 });
+    const extra = item.missing ? `${plural(item.missing, 'mod')} from it ${item.missing === 1 ? 'is' : 'are'} not in your library any more and will be skipped (the details show which).` : '';
+    const r = await dialog({
+      title: `Go back to “${histTitle(item)}”?`,
+      message: `Your mod list becomes the one from that setup. Nothing in the game changes until you review and apply. ${extra}`.trim(),
+      confirm: 'Restore', trigger,
+    });
+    if (!r) return;
+    const next = await api.post('/api/snapshots/restore', { id: item.id });
+    setState(next);
+    render();
+    const res = next.restored || {};
+    const skipped = res.missing?.length || 0;
+    toast(skipped ? `Restored, but ${plural(skipped, 'mod')} could not come back. Check the details.` : 'Restored. Review changes to apply it.',
+      { tone: skipped ? 'warn' : 'ok', timeout: 6000 });
+  } catch (err) { toast(err.message, { tone: 'error', timeout: 6000 }); }
+}
+
+// ---------- Profiles page ----------
+const PR = { sel: null };
+
+function renderProfilesPage() {
+  const st = S.st;
+  const list = $('#profList'), detail = $('#profDetail');
+  const names = st?.profiles || [];
+  if (!st || S.status !== 'ready') { list.innerHTML = ''; detail.innerHTML = ''; return; }
+  if (!names.includes(PR.sel)) PR.sel = st.profile && names.includes(st.profile) ? st.profile : names[0] || null;
+  const onlyOne = names.length <= 1;
+  list.innerHTML = names.length ? names.map((n) => {
+    const cur = n === st.profile, on = n === PR.sel;
+    const on_ = st.mods.filter((m) => m.enabled).length;
+    return `<div class="pick-item${on ? ' is-on' : ''}" role="listitem" tabindex="0" data-profile="${esc(n)}"${on ? ' aria-current="true"' : ''}>
+      <span class="avatar">${esc(n.trim().slice(0, 1).toUpperCase() || '?')}</span>
+      <span class="rl-text"><span class="rl-name">${esc(n)}${cur ? '<span class="tag2">In use</span>' : ''}${cur && st.profileDirty ? '<span class="tag2 quiet">Edited</span>' : ''}</span>
+      <span class="rl-meta">${cur ? `${nf.format(on_)} of ${nf.format(st.mods.length)} mods on` : 'Not in use'}</span></span>
+      <span class="ib-row">
+        <button class="ib" type="button" data-pact="rename" aria-label="Rename “${esc(n)}”" title="Rename">${icon('pencil', 16)}</button>
+        <button class="ib is-danger" type="button" data-pact="delete" aria-label="Delete “${esc(n)}”" title="${onlyOne ? 'You need at least one profile' : 'Delete'}"${onlyOne ? ' aria-disabled="true"' : ''}>${icon('trash', 16)}</button>
+      </span></div>`;
+  }).join('') : '<p class="pg-empty">No profiles yet.</p>';
+  if (!PR.sel) { detail.innerHTML = '<div class="detail-head"><div><h2>Profiles</h2><p>A profile is a saved list of which mods are on. Make one with New profile.</p></div></div>'; return; }
+  const n = PR.sel, cur = n === st.profile;
+  const total = st.mods.length, on = st.mods.filter((m) => m.enabled).length, p = pending();
+  const head = `<div class="detail-head"><div><h2>${esc(n)}</h2><p>${cur ? `In use now${st.profileDirty ? '. Edited since it was saved' : ''}` : 'Not in use. Switch to it to see what it turns on.'}</p></div></div>`;
+  const buttons = (first) => `<div class="detail-actions">${first}<span class="spacer"></span>
+    <button class="btn" type="button" data-pact="rename">${icon('pencil', 16)}Rename</button>
+    <button class="btn btn-soft-danger" type="button" data-pact="delete"${onlyOne ? ' aria-disabled="true" title="You need at least one profile"' : ''}>${icon('trash', 16)}Delete</button></div>`;
+  if (!cur) {
+    detail.innerHTML = head + `<div class="grow"><p class="note-card">The list of mods in a profile is shown while it is the one in use. Use this profile to switch to it. Nothing in the game changes until you apply.</p></div>`
+      + buttons(`<button class="btn btn-primary" type="button" data-pact="use">${icon('swap', 16)}Use this profile</button>`);
+    return;
   }
+  detail.innerHTML = head + `<div class="tiles"><div class="tile"><b>${nf.format(on)}</b><span>mods on</span></div><div class="tile"><b>${nf.format(total - on)}</b><span>mods off</span></div>
+      <div class="tile"><b>${nf.format(st.deployedCount || 0)}</b><span>files in the game</span></div><div class="tile"><b>${nf.format(p.total)}</b><span>changes waiting</span></div></div>
+    <h3>What is on, by category</h3>
+    <div class="grow">${libGroups().map((g) => {
+      const gm = st.mods.filter((m) => (GROUPS.includes(m.group) ? m.group : 'Other') === g);
+      const gOn = gm.filter((m) => m.enabled).length;
+      return `<div class="mini-meter"><span class="nm">${icon(GROUP_ICON[g] || 'other', 16)}${esc(g)}</span><span class="bar2" aria-hidden="true"><i style="width:${gm.length ? Math.round((gOn / gm.length) * 100) : 0}%"></i></span><span class="n">${gOn}/${gm.length}</span></div>`;
+    }).join('')}</div>`
+    + buttons(`${st.profileDirty ? `<button class="btn btn-primary" type="button" data-pact="save">${icon('save', 16)}Save changes</button>` : ''}<button class="btn" type="button" data-pact="library">${icon('mods', 16)}Open in Library</button>`);
+}
+
+function wireProfilesPage() {
+  const list = $('#profList');
+  const pick = (el) => { PR.sel = el.dataset.profile; renderProfilesPage(); list.querySelector('.is-on')?.focus({ preventScroll: true }); };
+  list.addEventListener('click', async (e) => {
+    const item = e.target.closest('[data-profile]');
+    if (!item) return;
+    const act = e.target.closest('[data-pact]');
+    if (!act) { pick(item); return; }
+    if (act.getAttribute('aria-disabled') === 'true') return;
+    await profileAct(act.dataset.pact, item.dataset.profile, act);
+  });
+  list.addEventListener('keydown', (e) => {
+    const item = e.target.closest('[data-profile]');
+    if (!item || e.target !== item) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(item); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const all = [...list.querySelectorAll('[data-profile]')], i = all.indexOf(item) + (e.key === 'ArrowDown' ? 1 : -1);
+      if (all[i]) { e.preventDefault(); all[i].focus(); }
+    }
+  });
+  $('#profDetail').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-pact]');
+    if (!b || b.getAttribute('aria-disabled') === 'true') return;
+    await profileAct(b.dataset.pact, PR.sel, b);
+  });
+  $('#profNew').addEventListener('click', (e) => newProfile(e.currentTarget));
+}
+
+async function profileAct(act, name, trigger) {
+  if (act === 'use') { await selectProfile(name, trigger); PR.sel = name; renderProfilesPage(); return; }
+  if (act === 'library') { showPage('mods'); return; }
+  if (act === 'rename') { const to = await profileAction('rename', name, trigger); if (to) PR.sel = to; renderProfilesPage(); return; }
+  await profileAction(act, name, trigger);   // delete, save
+}
+
+// ---------- History and trash page ----------
+const H = { tab: 'setups', sel: { setups: null, trash: null }, detail: new Map(), seq: 0 };
+
+function renderHistoryPage() {
+  const trash = H.tab === 'trash';
+  for (const r of document.querySelectorAll('#histTabs input')) r.checked = r.value === H.tab;
+  const items = trash ? (S.trash?.items || []) : (S.history || []);
+  if (!items.some((i) => i.id === H.sel[H.tab])) H.sel[H.tab] = items[0]?.id || null;
+  const list = $('#histList');
+  list.innerHTML = items.length ? items.map((i) => {
+    const on = i.id === H.sel[H.tab];
+    if (trash) {
+      return `<button class="pick-item${on ? ' is-on' : ''}" type="button" role="listitem" data-id="${esc(i.id)}"${on ? ' aria-current="true"' : ''}>
+        <span class="rl-text"><span class="rl-name">${esc(i.name)}</span><span class="rl-meta">${plural(i.files, 'file')} · ${fmtSize(i.size)} · deleted ${esc(i.deletedAt)}</span></span></button>`;
+    }
+    return `<button class="pick-item${on ? ' is-on' : ''}" type="button" role="listitem" data-id="${esc(i.id)}"${on ? ' aria-current="true"' : ''}>
+      <span class="rl-text"><span class="rl-name">${esc(histTitle(i))}${i.pinned ? '<span class="tag2">Kept</span>' : ''}</span>
+      <span class="rl-meta">${esc(i.profile || 'No profile')} · ${plural(i.count, 'mod')} on</span></span></button>`;
+  }).join('') : `<p class="pg-empty">${trash ? 'Nothing in the trash.' : 'Nothing yet. Your first setup is saved the next time you apply.'}</p>`;
+  const empty = $('#trEmpty');
+  empty.hidden = !(trash && items.length);
+  if (!empty.dataset.icons) { empty.innerHTML = `${icon('trash', 16)}Empty trash…`; empty.dataset.icons = '1'; }
+  renderHistoryDetail();
+}
+
+function renderHistoryDetail() {
+  const box = $('#histDetail');
+  const trash = H.tab === 'trash';
+  const items = trash ? (S.trash?.items || []) : (S.history || []);
+  const item = items.find((i) => i.id === H.sel[H.tab]);
+  if (!item) {
+    box.innerHTML = `<div class="detail-head"><div><h2>${trash ? 'Deleted mods' : 'Setup history'}</h2><p>${trash ? 'Mods you delete wait here until you empty the trash.' : 'A setup is saved every time you apply. Pick one to see what it had.'}</p></div></div>`;
+    return;
+  }
+  if (trash) {
+    box.innerHTML = `<div class="detail-head"><div><h2>${esc(item.name)}</h2><p>Deleted ${esc(item.deletedAt)}. Kept until you empty the trash.</p></div></div>
+      <div class="tiles"><div class="tile"><b>${nf.format(item.files)}</b><span>files</span></div><div class="tile"><b>${esc(fmtSize(item.size))}</b><span>size</span></div></div>
+      <div class="grow"></div>
+      <div class="detail-actions"><button class="btn btn-primary" type="button" data-hact="restore">${icon('restore', 16)}Restore to the library</button><span class="spacer"></span><button class="btn btn-soft-danger" type="button" data-hact="forever">${icon('trash', 16)}Delete for good</button></div>`;
+    return;
+  }
+  const diff = [];
+  if (item.turnOn) diff.push(`${nf.format(item.turnOn)} turned on`);
+  if (item.turnOff) diff.push(`${nf.format(item.turnOff)} turned off`);
+  box.innerHTML = `<div class="detail-head"><div><h2>${esc(histTitle(item))}</h2><p>${esc(fmtWhen(item.at))} · ${esc(item.profile || 'No profile')} · ${plural(item.count, 'mod')} on</p></div></div>
+    <div class="tiles"><div class="tile"><b>${nf.format(item.turnOn || 0)}</b><span>turned on since the one before</span></div><div class="tile"><b>${nf.format(item.turnOff || 0)}</b><span>turned off</span></div><div class="tile"><b>${nf.format(item.count)}</b><span>mods on</span></div><div class="tile"><b>${nf.format((item.missing || 0) + (item.changed || 0))}</b><span>different in your library now</span></div></div>
+    <div class="grow" id="histBody"><p class="hist-meta">Loading…</p></div>
+    <div class="detail-actions"><button class="btn" type="button" data-hact="restore">${icon('restore', 16)}Restore this setup</button></div>`;
+  const id = item.id, seq = ++H.seq;
+  const fill = (html) => { if (seq === H.seq && $('#histBody')) $('#histBody').innerHTML = html; };
+  const cached = H.detail.get(id);
+  if (cached) { fill(histDetailHTML(cached)); return; }
+  api.get(`/api/snapshots/${id}`).then((d) => { H.detail.set(id, d); fill(histDetailHTML(d)); })
+    .catch((e) => fill(`<p class="hist-meta">${esc(e.message)}</p>`));
+}
+
+async function showHistoryPage() {
+  H.detail.clear();
+  try { await Promise.all([loadHistory(), loadTrash()]); } catch (e) { toast(e.message, { tone: 'error', timeout: 5000 }); }
+  renderHistoryPage();
+}
+
+function wireHistoryPage() {
+  $('#histTabs').addEventListener('change', (e) => { if (e.target.name === 'histTab') { H.tab = e.target.value; renderHistoryPage(); } });
+  $('#histList').addEventListener('click', (e) => { const b = e.target.closest('[data-id]'); if (b) { H.sel[H.tab] = b.dataset.id; renderHistoryPage(); } });
+  $('#histDetail').addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-hact]');
+    if (b) {
+      const trash = H.tab === 'trash';
+      const item = (trash ? S.trash?.items : S.history)?.find((i) => i.id === H.sel[H.tab]);
+      if (!item) return;
+      if (b.dataset.hact === 'restore') { if (trash) await restoreTrashItem(item, b); else { await restoreSnapshot(item, b); } }
+      else if (b.dataset.hact === 'forever') await deleteTrashItemForever(item, b);
+      return;
+    }
+    const c = e.target.closest('[data-hist-act="copy"]');
+    if (c) toast((await copyText(c.dataset.url)) ? 'Link copied' : c.dataset.url, { tone: 'ok', timeout: 5000 });
+  });
+  $('#trEmpty').addEventListener('click', (e) => emptyTrash(e.currentTarget));
 }
 
 // ---------- Move a mod to another category ----------
@@ -1576,6 +1875,7 @@ async function newProfile(trigger) {
 
 async function profileAction(act, name, trigger) {
   const st = S.st || {};
+  if (act === 'new') { await newProfile(trigger); return; }
   try {
     if (act === 'rename') {
       const r = await dialog({
@@ -1587,6 +1887,7 @@ async function profileAction(act, name, trigger) {
       await api.post('/api/profile/rename', { name, to: r.value });
       await refresh();
       toast(`Renamed to “${r.value}”`, { tone: 'ok' });
+      return r.value;
     } else if (act === 'delete') {
       const r = await dialog({
         title: `Delete “${name}”?`,
@@ -1607,34 +1908,42 @@ async function profileAction(act, name, trigger) {
   }
 }
 
-async function runMenuAction(act, trigger) {
-  try {
-    if (act === 'history') {
-      await openHistory(trigger);
-    } else if (act === 'trash') {
-      await openTrash(trigger);
-    } else if (act === 'transfer') {
-      await openTransfer(trigger);
-    } else if (act === 'game') {
-      await openGameFolder(trigger);
-    } else if (act === 'appearance') {
-      syncSettingsForm();
-      openModal($('#settingsSheet'), { trigger, initialFocus: 'input[name="theme"]:checked' });
-    }
-  } catch (e) {
-    toast(e.message, { tone: 'error', timeout: 5000 });
-  }
-}
-
 // ----- Appearance -----
 function buildSwatches() {
   const box = $('#swatches');
   box.innerHTML = ACCENTS.map(([label, hex]) => `
     <label class="swatch" style="--c:${hex}" title="${label}"><input type="radio" name="accent" value="${hex}" aria-label="${label}"><span class="swatch-dot"></span></label>`).join('') +
-    `<label class="swatch swatch-custom" title="Custom colour"><input type="color" id="accentPicker" aria-label="Custom accent colour"><span class="swatch-dot"></span></label>`;
+    `<button type="button" class="swatch swatch-custom" id="customSwatch" title="Custom colour" aria-label="Custom accent colour" aria-expanded="false" aria-controls="cpick"><span class="swatch-dot"></span></button>`;
 }
 
-function syncSettingsForm() {
+// The themed colour picker opens inline under the swatches (no pop-up to clip or lose focus).
+let picker = null;
+function setupPicker() {
+  const panel = $('#cpick'), btn = $('#customSwatch');
+  const close = () => {
+    if (panel.hidden) return;
+    btn.setAttribute('aria-expanded', 'false');
+    animate(panel, { o: 0, y: -6 }, { response: 0.2 }).then((done) => { if (done) panel.hidden = true; });
+    btn.focus({ preventScroll: true });
+  };
+  picker = createColorPicker(panel, {
+    get: () => S.settings.accent,
+    onInput: (hex) => { S.settings.accent = hex; applyTheme(false); syncSettingsForm(true); },   // live while dragging: no cross-fade for a high-frequency input
+    onCommit: (hex) => saveSettings({ accent: hex }, false),
+    onClose: close,
+  });
+  btn.addEventListener('click', () => {
+    if (!panel.hidden) { close(); return; }
+    picker.sync();
+    panel.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    set(panel, { o: 0, y: -6 });
+    animate(panel, { o: 1, y: 0 }, { response: 0.28 });
+    panel.querySelector('.cpick-sv').focus({ preventScroll: true });
+  });
+}
+
+function syncSettingsForm(fromPicker = false) {
   const s = S.settings;
   for (const r of document.querySelectorAll('input[name="theme"]')) r.checked = r.value === s.theme;
   const preset = ACCENTS.find(([, hex]) => hex.toLowerCase() === String(s.accent).toLowerCase());
@@ -1643,8 +1952,8 @@ function syncSettingsForm() {
   if (custom) {
     custom.classList.toggle('is-selected', !preset);
     custom.style.setProperty('--c', s.accent);
-    $('#accentPicker').value = /^#[0-9a-f]{6}$/i.test(s.accent) ? s.accent.toLowerCase() : '#0a84ff';
   }
+  if (picker && !fromPicker) picker.sync();
 }
 
 // ----- Import by drag and drop -----
@@ -1780,25 +2089,24 @@ function wire() {
   $('#gfSave').addEventListener('click', gfSave);
   $('#xfForm').addEventListener('change', (e) => {
     const t = e.target;
-    if (t.matches('.xf-pt-head input')) {
-      const side = t.name === 'xfPt-source' ? 'source' : 'target';
-      xf.pick[side] = t.value;
-      xfRenderSide(side);
-      $(`#${side === 'source' ? 'xfSourceList' : 'xfTargetList'} input:checked`)?.focus();
+    if (t.name === 'xfTab') return;     // switching the tab only shows the other tiles
+    if (t.matches('.xf-pt input')) {
+      xf.pick.source = t.value;
+      xfRenderSide('source');
+      $('#xfSourceList input:checked')?.focus();
     } else if (t.matches('select[data-xf-save]')) {
       const side = t.dataset.xfSave;
       xf.save[side][xf.pick[side]] = t.value;
     }
     xfChanged();
   });
-  $('#xfForm').addEventListener('click', (e) => { const b = e.target.closest('[data-rename]'); if (b) xfRename(b.dataset.rename, b); });
   $('#xfRun').addEventListener('click', xfRun);
   $('#xfCheck').addEventListener('click', xfPreview);
   $('#xfMoney').addEventListener('input', xfChanged);
   $('#xfAgain').addEventListener('click', xfAgain);
-  $('#historySheet').addEventListener('click', historyClick);
-  $('#trashSheet').addEventListener('click', trashClick);
-  $('#trEmpty').addEventListener('click', (e) => emptyTrash(e.currentTarget));
+  wireHistoryPage();
+  wireProfilesPage();
+  wireSavesPages();
   list.addEventListener('keydown', (e) => {
     const items = navItems();
     const i = items.indexOf(document.activeElement);
@@ -1830,7 +2138,7 @@ function wire() {
   });
 
   const search = $('#search');
-  search.addEventListener('input', () => { S.query = search.value; renderList(); });
+  search.addEventListener('input', () => { S.query = search.value; if (S.page !== 'mods') showPage('mods'); renderList(); });
   search.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') { const first = navItems()[0]; if (first) { e.preventDefault(); focusNav(first); } }
     if (e.key === 'Enter') { const first = navItems().find((n) => n.classList.contains('switch')); if (first && S.query) { e.preventDefault(); focusNav(first); } }
@@ -1868,9 +2176,7 @@ function wire() {
   });
 
   $('#profileBtn').addEventListener('click', (e) => { renderProfileMenu(); openPopover($('#profileMenu'), e.currentTarget, { align: 'start' }); });
-  $('#moreBtn').addEventListener('click', (e) => { renderMoreMenu(); openPopover($('#moreMenu'), e.currentTarget, { align: 'end' }); });
 
-  $('#newProfileBtn').addEventListener('click', (e) => newProfile(e.currentTarget));
   $('#profileMenu').addEventListener('click', (e) => {
     const act = e.target.closest('[data-profile-act]');
     if (act) {
@@ -1884,12 +2190,7 @@ function wire() {
     closePopovers(true);
     selectProfile(b.dataset.profile, $('#profileBtn'));
   });
-  $('#moreMenu').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-act]');
-    if (!b || b.getAttribute('aria-disabled') === 'true') return;
-    closePopovers(true);
-    runMenuAction(b.dataset.act, $('#moreBtn'));
-  });
+  $('#cats').addEventListener('click', (e) => { const b = e.target.closest('[data-cat]'); if (b) jumpCat(b.dataset.cat); });
 
   $('#previewBtn').addEventListener('click', (e) => openPreview(e.currentTarget));
   $('#applyBtn').addEventListener('click', (e) => { if (e.currentTarget.getAttribute('aria-disabled') !== 'true') startApply(e.currentTarget); });
@@ -1901,9 +2202,6 @@ function wire() {
 
   for (const r of document.querySelectorAll('input[name="theme"]')) r.addEventListener('change', () => saveSettings({ theme: r.value }));
   $('#swatches').addEventListener('change', (e) => { if (e.target.name === 'accent') saveSettings({ accent: e.target.value }); });
-  // Custom picker: live while dragging (no cross-fade for a high-frequency input), saved on change.
-  $('#accentPicker').addEventListener('input', (e) => { S.settings.accent = e.target.value.toUpperCase(); applyTheme(false); syncSettingsForm(); });
-  $('#accentPicker').addEventListener('change', (e) => saveSettings({ accent: e.target.value.toUpperCase() }, false));
   darkMQ.addEventListener('change', () => { if (S.settings.theme === 'system') applyTheme(true); });
 
   // The page scrolls inside #scroller (so the top bar and window buttons can sit over its scrollbar column).
@@ -1952,7 +2250,10 @@ async function resumeApplyIfRunning() {
 async function init() {
   await setupHost();
   hydrateIcons();
+  setupRail();
+  showPage('mods');
   buildSwatches();
+  setupPicker();
   applyTheme(false);
   syncSettingsForm();
   wire();
@@ -1960,7 +2261,22 @@ async function init() {
   const mode = await initApi();
   if (mode === 'mock') { $('#demoChip').hidden = false; setupMockChip(); }
   await loadSettings();
+  if (mode === 'mock') {   // sample-data mode only: ?theme=light and ?accent=%23BF5AF2 look at a theme without saving it (for screenshots)
+    const q = new URLSearchParams(location.search);
+    if (['light', 'dark', 'system'].includes(q.get('theme'))) S.settings.theme = q.get('theme');
+    if (/^#[0-9a-f]{6}$/i.test(q.get('accent') || '')) S.settings.accent = q.get('accent').toUpperCase();
+    applyTheme(false); syncSettingsForm();
+  }
   await load();
+  const startQ = new URLSearchParams(location.search);
+  const startPage = startQ.get('page');   // ?page=runs opens that page (handy for screenshots and tests)
+  if (startPage && PAGE_LABEL[startPage] && startPage !== 'mods') showPage(startPage);
+  if (mode === 'mock' && startQ.get('tab') === 'copy') {   // sample-data mode: ?tab=copy&open=1 shows the copy tab with its save list open (for screenshots)
+    await new Promise((r) => setTimeout(r, 700));
+    const t = document.querySelector('#xfTabs input[value="copy"]'); t.checked = true; t.dispatchEvent(new Event('change', { bubbles: true }));
+    const l = $('#xfLook'); l.checked = true; l.dispatchEvent(new Event('change', { bubbles: true }));
+    if (startQ.get('open')) document.querySelector('#xfSourceSave + .tsel .tsel-btn').click();
+  }
   S.bannerLive = true;   // from here on, the banner animates in and out
   await resumeApplyIfRunning();
 }

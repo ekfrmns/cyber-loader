@@ -26,6 +26,11 @@ const P = {
   folder: '<path d="M3 6a1.5 1.5 0 0 1 1.5-1.5h3.2l1.6 1.8h6.2A1.5 1.5 0 0 1 17 7.8v6.7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5z"/>',
   plusCircle: '<circle cx="10" cy="10" r="6.8"/><path d="M10 7v6M7 10h6"/>',
   minusCircle: '<circle cx="10" cy="10" r="6.8"/><path d="M7 10h6"/>',
+  gear: '<path d="M3.5 6h5.8M13.2 6h3.3M3.5 14h2.6M9.9 14h6.6"/><circle cx="11.2" cy="6" r="1.9"/><circle cx="8" cy="14" r="1.9"/>',
+  mods: '<path d="M10 3l6.5 3.4v7.2L10 17l-6.5-3.4V6.4z"/><path d="M3.8 6.6L10 10l6.2-3.4M10 10v6.8"/>',
+  swap: '<path d="M4 7h11M11.5 3.5L15 7l-3.5 3.5"/><path d="M16 13H5M8.5 9.5L5 13l3.5 3.5"/>',
+  coin: '<circle cx="10" cy="10" r="6.8"/><path d="M12.4 7.8c-.5-.7-1.3-1-2.4-1-1.3 0-2.1.6-2.1 1.5 0 2.1 4.6.9 4.6 3.1 0 .9-.9 1.6-2.4 1.6-1.1 0-2-.4-2.5-1.1M10 5.6v1.2M10 13.2v1.2"/>',
+  target: '<circle cx="10" cy="10" r="6.5"/><circle cx="10" cy="10" r="3"/><path d="M10 2.5v3M10 14.5v3M2.5 10h3M14.5 10h3"/>',
 };
 
 export function icon(name, size = 20, cls = '') {

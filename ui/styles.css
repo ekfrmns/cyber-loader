@@ -716,6 +716,29 @@ button.chip:hover { background: var(--fill-1); }
 .swatch-custom input[type="color"] { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; border: 0; padding: 0; cursor: pointer; }
 .swatch-custom:has(input:focus-visible) .swatch-dot { outline: 2px solid var(--ring); outline-offset: 5px; }
 .swatch-custom.is-selected .swatch-dot { background: var(--c); }
+.swatch-custom { border: 0; background: none; padding: 0; font: inherit; }   /* it is a button now, it opens the picker below */
+
+/* Themed colour picker (opens inline under the swatches) */
+.cpick { margin: 14px 0 0; padding: 12px; border-radius: var(--r-lg); background: var(--fill-1); }
+.cpick-sv {
+  --h: 350; position: relative; height: 150px; border-radius: var(--r-md); touch-action: none; cursor: crosshair;
+  background: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(var(--h) 100% 50%));
+}
+.cpick-hue { position: relative; height: 16px; margin-top: 14px; border-radius: var(--r-full); touch-action: none; cursor: pointer; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); }
+.cpick-knob, .cpick-hknob {
+  position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; pointer-events: none;
+  border: 3px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, .3), 0 2px 6px rgba(0, 0, 0, .35);
+}
+.cpick-hknob { top: 50%; }
+.cpick-sv:focus-visible, .cpick-hue:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.cpick-row { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.cpick-chip { width: 34px; height: 34px; border-radius: 11px; flex: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 0 0 0 1px rgba(0, 0, 0, .08); }
+.cpick-hex { flex: 1; min-width: 0; }
+.cpick-hex input { width: 100%; height: 34px; padding: 0 10px; border-radius: var(--r-sm); border: 1px solid var(--separator); background: var(--card); color: var(--text); font: 13px ui-monospace, "Cascadia Mono", Consolas, monospace; text-transform: uppercase; outline: none; }
+.cpick-hex input:focus-visible { outline: 2px solid var(--ring); outline-offset: 0; border-color: transparent; }
+.cpick-hex input[aria-invalid="true"] { border-color: var(--danger); }
+.cpick .btn { height: 34px; padding: 0 12px; }
+.cpick-note { margin: 10px 2px 0; font-size: 12px; line-height: 1.4; color: var(--text-3); }
 
 /* ---------- Popovers ---------- */
 .popover {
@@ -922,3 +945,49 @@ button.chip:hover { background: var(--fill-1); }
 .xf-check { margin-top: 10px; }
 .xf-money-field { margin-top: 0; }
 .xf-money input { font-variant-numeric: tabular-nums; }
+
+/* ---------- Controls, round two: rounded everything, buttons with a little depth, soft danger, centred icons ---------- */
+/* No sharp corners: checkboxes and radio dots are drawn by us, not by Windows. */
+input[type="checkbox"], input[type="radio"] {
+  -webkit-appearance: none; appearance: none; flex: none; margin: 0; display: inline-grid; place-content: center;
+  width: 20px; height: 20px; border: 1.5px solid var(--text-3); background: transparent; color: var(--on-accent);
+  transition: background-color 110ms linear, border-color 110ms linear;
+}
+input[type="checkbox"] { border-radius: 7px; }
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]::after { content: ""; width: 10px; height: 5px; margin-top: -2px; border-left: 2px solid currentColor; border-bottom: 2px solid currentColor; border-radius: 1px; transform: rotate(-45deg) scale(0); transition: transform 120ms cubic-bezier(.3, .7, .4, 1); }
+input[type="checkbox"]:checked::after { transform: rotate(-45deg) scale(1); }
+input[type="radio"]::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; transform: scale(0); transition: transform 120ms cubic-bezier(.3, .7, .4, 1); }
+input[type="radio"]:checked::after { transform: scale(1); }
+input[type="checkbox"]:checked, input[type="radio"]:checked { background: var(--accent-fill); border-color: transparent; }
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.segmented input[type="radio"], .swatch input[type="radio"] { position: absolute; inset: 0; width: auto; height: auto; opacity: 0; border: 0; background: none; }
+.segmented input[type="radio"]::after, .swatch input[type="radio"]::after { display: none; }
+:root[data-reduce-motion] input[type="checkbox"]::after, :root[data-reduce-motion] input[type="radio"]::after { transition: none; }
+
+/* Buttons: glass with a light edge and a little depth, 12px corners */
+:root { --btn-hi: rgba(255, 255, 255, .15); --btn-lo: rgba(255, 255, 255, .055); --danger-ink: color-mix(in srgb, var(--danger) 82%, var(--text)); }
+:root[data-theme="light"] { --btn-hi: rgba(255, 255, 255, 1); --btn-lo: rgba(255, 255, 255, .72); }
+:root .btn { border-radius: 12px; gap: 8px; background: linear-gradient(180deg, var(--btn-hi), var(--btn-lo)); box-shadow: inset 0 1px 0 var(--glass-hi), 0 1px 2px rgba(0, 0, 0, .14), 0 6px 14px rgba(0, 0, 0, .06); transition: transform 120ms cubic-bezier(.3, .7, .4, 1), filter 120ms linear, box-shadow 120ms linear; }
+:root .btn:hover { background: linear-gradient(180deg, var(--btn-hi), var(--btn-lo)); filter: brightness(1.12); }
+:root[data-theme="light"] .btn:hover { filter: brightness(.98); }
+:root .btn .ic { flex: none; display: block; }
+:root .btn-primary { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-fill) 80%, #fff), var(--accent-fill)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .42), 0 1px 2px rgba(0, 0, 0, .22), 0 8px 22px color-mix(in srgb, var(--accent) 34%, transparent); }
+:root .btn-primary:hover { background: linear-gradient(180deg, color-mix(in srgb, var(--accent-fill) 80%, #fff), var(--accent-fill)); filter: brightness(1.07); }
+:root .btn-quiet { background: transparent; box-shadow: none; border-color: transparent; }
+:root .bar .btn:not(.btn-primary), :root .sheet .btn:not(.btn-primary):not(.btn-danger):not(.btn-quiet) { background: linear-gradient(180deg, var(--btn-hi), var(--btn-lo)); }
+/* Danger, softly: a tinted button with red text. Solid red stays inside the "are you sure?" pop-up only. */
+:root .btn-soft-danger { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger-ink); border-color: color-mix(in srgb, var(--danger) 26%, transparent); box-shadow: none; }
+:root .btn-soft-danger:hover { background: color-mix(in srgb, var(--danger) 19%, transparent); filter: none; }
+:root[data-reduce-motion] .btn:active { transform: none; }
+/* Small round-cornered icon buttons (rename, delete) */
+.ib { width: 34px; height: 34px; border-radius: 11px; border: 0; background: var(--fill-1); color: var(--text-2); display: inline-grid; place-items: center; flex: none; transition: background-color 120ms linear, color 120ms linear, transform 120ms cubic-bezier(.3, .7, .4, 1); }
+.ib:hover { background: var(--fill-2); color: var(--text); }
+.ib.is-danger:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger-ink); }
+.ib:active { transform: scale(.94); }
+.ib .ic { display: block; }
+
+/* The check mark in the "Applied" badge: bigger, and centred by the badge, not by the text line */
+.success-badge { display: grid; place-items: center; }
+.success-badge > span { display: grid; place-items: center; line-height: 0; }
+.success-badge .ic { display: block; stroke-width: 2.4; }

@@ -1,6 +1,19 @@
 # Changelog
 
-Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = changes that need your data migrated.
+Every release gets a section here BEFORE it is installed (`tools/release.py` refuses without one). Newest first. Versions follow `MAJOR.MINOR.PATCH`: PATCH = bug fix, MINOR = new feature, MAJOR = a redesign or changes that need your data migrated.
+
+## 2.0.0 - 2026-11-19
+A new look and layout for the whole app. Nothing about your data changes: your library, profiles, saves and settings carry over as they are, and the engine and its API are unchanged.
+- **Side bar layout.** Library, Profiles, Runs, Characters, History and trash, and Settings are now pages you switch between from a side bar. The "..." menu, the "+" button and the old pop-up windows (Appearance, Game folder, History, Trash and the character tool) are gone; each is a page now. Your active profile (with a Switch button) sits at the top of the side bar and the game's state at the bottom. Below about 1100 px wide the side bar shrinks to icons, and below 760 px the Library's category list hides.
+- **One layout rule.** Profiles, Runs, Characters and History all work the same way: pick on the left, see and change it on the right. The Library's category list on the left jumps to that category in the long list on the right. A slim strip under the top bar names the page and gives one line of help, and the search sits in the middle of the top bar on every page (typing on another page takes you to the Library).
+- **Characters has its own page.** What used to be "Change or move a character" in the menu is now a page of its own in the side bar (it still only appears when the optional add-on is installed). The run and save choice is two steps ("Which run?", then "Which save?"), nothing jumps when you switch runs, and the save list shows the name large with the details small.
+- **Themed controls.** The save lists use a themed drop-down instead of the system's plain grey list (arrow keys, type to jump, Escape to close). Checkboxes and radio buttons are rounded and take your accent colour. Buttons have one consistent look, with a soft red for delete actions, and the check mark on the "Applied" badge is centred.
+- **Colour picker and accent.** Pink is first in the accent list. A custom colour opens a built-in rounded picker (square, hue slider and hex field, keyboard friendly) instead of the system colour dialog.
+- **The logo follows your accent.** The logo in the top left is drawn from your accent colour and follows the colour picker as you drag. The pink is a little softer than before and the middle bar is a touch lighter. The app, taskbar and shortcut icons are unchanged.
+- **The game's state, in plain sight.** The text above Settings is no longer in a box: it shows the game's name, a coloured dot (closed, running, not connected) and its version.
+- **Setup makes no Desktop shortcut by default.** Before, every install put one back on the Desktop. Now only `/DESKTOP` (or the wizard's checkbox, which starts unticked) makes one. `/NODESKTOP` still works and does nothing new. The Start menu entry is unchanged.
+- Window buttons sit with equal gaps and a soft red close, and the side bar's tooltips wait half a second.
+- API: unchanged.
 
 ## 1.7.0 - 2026-11-18
 A new default look and icon, plus two new options in "Change or move a character".

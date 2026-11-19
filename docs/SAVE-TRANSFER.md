@@ -1,9 +1,9 @@
 # Save transfer (optional add-on)
 
-"Change or move a character…" in the "..." menu copies parts of one Cyberpunk 2077 save onto another: gender and voice, the look (face, hair,
+The **Characters** page (Saves, in the side bar) copies parts of one Cyberpunk 2077 save onto another: gender and voice, the look (face, hair,
 body shape, tattoos), clothes, Equipment-EX outfits and guns. It always makes a **new** save; the two saves it reads are never changed.
 
-The menu entry only appears when the add-on is installed. A normal install does not have it.
+The Saves section of the side bar (Runs and Characters) only appears when the add-on is installed. A normal install does not have it.
 
 ## What it does and does not do
 - Reads two saves from the game's saves folder (`%USERPROFILE%\Saved Games\CD Projekt Red\Cyberpunk 2077`; override with the
@@ -47,7 +47,7 @@ which it loads as a library. Nothing from it is shipped in this repo.
 2. Install the .NET 10 SDK (to build) and the .NET 10 Desktop Runtime (to run).
 3. Run `powershell -File tools\build-savetool.ps1 -EditorDir "<unzipped editor folder>" -Data "<your Cyber Loader data folder>"`.
    It builds `addons\savetool` and copies the result plus the editor files into `<data>\addons\savetool`.
-4. Restart Cyber Loader. "Change or move a character…" appears in the "..." menu.
+4. Restart Cyber Loader. The Saves section (Runs and Characters) appears in the side bar.
 
 The add-on is a console program that prints one JSON line per call: `savetool inspect <save>` and
 `savetool transfer [--source S] --target T --out DIR [--gender keep|female|male] [--look] [--clothes] [--outfits] [--guns] [--dry-run]`.

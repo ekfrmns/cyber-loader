@@ -2,7 +2,7 @@
 // Built by tools/package.py with the C# 5 compiler that ships with Windows: keep this file C# 5 compatible.
 // The app files travel inside this exe as resources: payload.zip (required) and sevenzip.zip (optional component).
 //
-// Silent install:   Setup.exe /S /D=<install dir> /GAME=<Cyberpunk 2077 folder> /DATA=<data folder> [/7ZIP=0|1] [/NODESKTOP] [/NOSTART] [/LAUNCH]
+// Silent install:   Setup.exe /S /D=<install dir> /GAME=<Cyberpunk 2077 folder> /DATA=<data folder> [/7ZIP=0|1] [/DESKTOP] [/NOSTART] [/LAUNCH]   (no Desktop shortcut unless /DESKTOP)
 // Silent uninstall: Uninstall.exe /S [/DELETEDATA]
 using System;
 using System.Collections.Generic;
@@ -26,7 +26,7 @@ using Microsoft.Win32;
 class Options
 {
     public string InstallDir, Game, Data, Version = "";
-    public bool Seven = true, Desktop = true, StartMenu = true, Launch, Silent, Uninstall, DeleteData;
+    public bool Seven = true, Desktop = false, StartMenu = true, Launch, Silent, Uninstall, DeleteData;
 
     public static Options Parse(string[] args)
     {
@@ -36,7 +36,8 @@ class Options
             string u = a.ToUpperInvariant();
             if (u == "/S") o.Silent = true;
             else if (u == "/UNINSTALL") o.Uninstall = true;
-            else if (u == "/NODESKTOP") o.Desktop = false;
+            else if (u == "/DESKTOP") o.Desktop = true;
+            else if (u == "/NODESKTOP") o.Desktop = false;   // kept so old command lines still work (no Desktop shortcut is the default)
             else if (u == "/NOSTART") o.StartMenu = false;
             else if (u == "/LAUNCH") o.Launch = true;
             else if (u == "/DELETEDATA") o.DeleteData = true;
@@ -689,7 +690,7 @@ class Wizard : Form
     {
         Panel p = new Panel();
         Label t = new Label { Text = "CyberLoader " + o.Version + " is installed.", Font = new Font("Segoe UI", 12f), Location = new Point(30, 12), Size = new Size(570, 28), ForeColor = ink };
-        Label d = Note("Open it from the desktop shortcut or the Start menu. Add your mods by dragging a mod archive or folder onto the window.\n\nTo remove CyberLoader later, use Windows Settings > Apps, or run Uninstall.exe in the install folder.", 30, 50, 570, 100, false);
+        Label d = Note("Open it from the Start menu (or from the Desktop shortcut, if you chose to make one). Add your mods by dragging a mod archive or folder onto the window.\n\nTo remove CyberLoader later, use Windows Settings > Apps, or run Uninstall.exe in the install folder.", 30, 50, 570, 100, false);
         chkLaunch = new CheckBox { Text = "Start CyberLoader now", Checked = true, Location = new Point(30, 160), AutoSize = true };
         p.Controls.AddRange(new Control[] { t, d, chkLaunch });
         return p;

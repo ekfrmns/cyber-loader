@@ -18,17 +18,20 @@ certutil -hashfile CyberLoader-Setup-<version>.exe SHA256
 
 All screenshots use invented sample mods.
 
-![The library with mods grouped into categories (the default look: dark with a pink-red accent)](screenshots/01-library-dark.png)
+![The library: categories on the left, mods on the right (the default look: dark with a pink-red accent)](screenshots/01-library-dark.png)
 
 | | |
 |---|---|
-| ![Light theme with an accent colour](screenshots/02-library-light.png) | ![Switching between profiles](screenshots/03-profiles.png) |
+| ![Light theme with a blue accent. The logo follows the accent colour](screenshots/02-library-light.png) | ![Profiles page](screenshots/03-profiles.png) |
 
 ![Review changes: exactly what Apply will add and remove](screenshots/04-review-changes.png)
 
+![Characters page: change a character or copy parts of one save onto another](screenshots/05-characters.png)
+
 ## What it does
 
-- **Library:** every mod lives in its own folder, laid out like the game folder. Drag a `.zip`, `.7z`, `.rar` or a plain folder onto the window to add it. Nothing from an archive is ever run.
+- **A side bar for everything:** Library, Profiles, Runs, Characters, History and trash, and Settings are all pages you switch between from one side bar. Your active profile and the game's state are always visible.
+- **Library:** every mod lives in its own folder, laid out like the game folder. Drag a `.zip`, `.7z`, `.rar` or a plain folder onto the window to add it. Nothing from an archive is ever run. Pick a category on the left to jump to it on the right.
 - **Profiles:** a profile is a list of which mods are on. "Empty" is the plain game. Make as many as you like.
 - **Apply:** shows exactly which files will be added and removed, then does it. Mods are hardlinked into the game (instant, no extra disk space) when the library is on the same drive as the game, and copied otherwise.
 - **Safe by design:**
@@ -37,8 +40,8 @@ All screenshots use invented sample mods.
   - A file that already exists and is not Cyber Loader's blocks the apply. Nothing is overwritten.
   - Apply refuses to run while the game is open.
 - **Trash:** deleting a mod moves it to the app's own trash, so you can restore it.
-- **Change or move a character (optional add-on):** copy the gender, look, clothes, outfits or guns of one Cyberpunk save onto another, or just change a character's gender. It always makes a new save and backs up first. It is built on the MIT-licensed [CP2077SaveEditor](https://github.com/Deweh/CyberCAT-SimpleGUI) and is not part of the installer; see [docs/SAVE-TRANSFER.md](docs/SAVE-TRANSFER.md).
-- Light, dark or system theme with an accent colour. A fresh install starts dark with a pink-red accent; your own choice always wins.
+- **Characters (optional add-on):** copy the gender, look, clothes, outfits or guns of one Cyberpunk save onto another, or just change a character's gender. It always makes a new save and backs up first. It is built on the MIT-licensed [CP2077SaveEditor](https://github.com/Deweh/CyberCAT-SimpleGUI) and is not part of the installer; see [docs/SAVE-TRANSFER.md](docs/SAVE-TRANSFER.md).
+- Light, dark or system theme with an accent colour, including your own colour from a built-in colour picker. The logo in the corner follows the accent. A fresh install starts dark with a pink-red accent; your own choice always wins.
 
 ## Install
 
@@ -47,11 +50,11 @@ Run the installer. The wizard asks for:
 1. **Install folder** (default: your local app data).
 2. **Cyberpunk 2077 folder.** Found automatically on Steam, GOG and Epic, or browse to it.
 3. **Where your mod library lives.** Keep it on the same drive as the game so mods are linked instead of copied.
-4. **Options:** 7-Zip (recommended, needed for `.7z` and `.rar` mods; plain `.zip` works without it), Desktop shortcut, Start menu shortcut.
+4. **Options:** 7-Zip (recommended, needed for `.7z` and `.rar` mods; plain `.zip` works without it), Start menu shortcut (on by default), Desktop shortcut (off by default).
 
 Updating: run a newer installer over the old one and point it at the same folder. Your library, profiles and trash are kept. Uninstall from Windows Settings, Apps, or with `Uninstall.exe` in the install folder.
 
-Silent install: `Setup.exe /S /D=<install dir> /GAME=<game dir> /DATA=<data dir> [/7ZIP=0] [/NODESKTOP] [/NOSTART]`. See [docs/INSTALL.md](docs/INSTALL.md).
+Silent install: `Setup.exe /S /D=<install dir> /GAME=<game dir> /DATA=<data dir> [/7ZIP=0] [/DESKTOP] [/NOSTART]`. See [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Build it yourself
 

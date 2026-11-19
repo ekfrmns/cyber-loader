@@ -7,11 +7,11 @@ profile off leaves no stray files behind, and it never overwrites a file it does
 not own.
 
 Getting started
-  1. Open CyberLoader from the desktop shortcut or the Start menu.
+  1. Open CyberLoader from the Start menu (or the desktop shortcut, if you made one).
   2. Drag a mod archive (.zip, .7z, .rar) or a mod folder onto the window to add it
      to your library. It is unpacked into its own folder and never run.
   3. Turn mods on or off, then press Apply. The game must be closed.
-  4. Use the "+" button for new profiles. The "Empty" profile is the plain game.
+  4. Open Profiles in the side bar and press "New profile". The "Empty" profile is the plain game.
 
 Where things are
   This folder          the program (safe to leave alone)
